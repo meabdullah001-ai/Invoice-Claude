@@ -1,0 +1,1107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'none'; frame-ancestors *; form-action 'none'; base-uri 'self';">
+<meta name="referrer" content="no-referrer">
+<title>Invoice Analytics — Manager.io</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ─── Reset & Base ─── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0f172a;--ink2:#1e293b;--ink3:#334155;
+  --muted:#64748b;--faint:#94a3b8;
+  --border:#e2e8f0;--border2:#cbd5e1;
+  --bg:#f1f5f9;--card:#fff;--card2:#f8fafc;
+  --blue:#2563eb;--blue-lt:#dbeafe;--blue-dk:#1d4ed8;
+  --green:#16a34a;--green-lt:#dcfce7;
+  --amber:#d97706;--amber-lt:#fef3c7;
+  --purple:#7c3aed;--purple-lt:#ede9fe;
+  --teal:#0d9488;--teal-lt:#ccfbf1;
+  --red:#dc2626;--red-lt:#fee2e2;
+  --indigo:#4338ca;--indigo-lt:#e0e7ff;
+  --radius:10px;--shadow:0 1px 4px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06);
+  --shadow-sm:0 1px 3px rgba(0,0,0,.07);
+}
+body{
+  font-family:'DM Sans',system-ui,-apple-system,sans-serif;
+  background:var(--bg);color:var(--ink);
+  min-height:100vh;font-size:13.5px;line-height:1.5;
+}
+a{color:var(--blue);text-decoration:none}
+
+/* ─── Layout ─── */
+.app-header{
+  background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);
+  color:#fff;padding:16px 20px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+.app-header .logo{
+  width:38px;height:38px;border-radius:9px;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;flex-shrink:0;
+}
+.app-header .titles{flex:1}
+.app-header h1{font-size:17px;font-weight:700;letter-spacing:-.02em;color:#fff}
+.app-header .subtitle{font-size:11.5px;color:rgba(255,255,255,.55);margin-top:1px}
+.badge{
+  font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:20px;
+  border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.75);
+  letter-spacing:.04em;text-transform:uppercase;
+}
+
+.main{padding:16px}
+
+/* ─── Control Bar ─── */
+.ctrl-bar{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:12px 16px;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  box-shadow:var(--shadow-sm);margin-bottom:14px;
+}
+.load-btn{
+  padding:8px 20px;border:none;border-radius:7px;cursor:pointer;
+  font-size:13px;font-weight:700;
+  background:var(--blue);color:#fff;white-space:nowrap;
+  transition:background .15s,transform .1s;
+}
+.load-btn:hover:not(:disabled){background:var(--blue-dk)}
+.load-btn:active:not(:disabled){transform:scale(.97)}
+.load-btn:disabled{opacity:.45;cursor:not-allowed}
+.progress-wrap{flex:1;min-width:80px;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.progress-bar{height:100%;width:0%;background:var(--blue);border-radius:3px;transition:width .3s ease}
+.status-txt{font-size:12px;color:var(--muted);white-space:nowrap}
+.err-box{
+  background:var(--red-lt);border:1px solid #fca5a5;color:var(--red);
+  border-radius:8px;padding:11px 14px;font-size:13px;margin-bottom:14px;
+}
+
+/* ─── Filter Panel ─── */
+.filter-panel{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 16px;
+  display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;
+  box-shadow:var(--shadow-sm);margin-bottom:14px;
+}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.fg select,.fg input[type=date]{
+  padding:6px 10px;border:1px solid var(--border2);border-radius:6px;
+  font-size:13px;color:var(--ink);background:#fff;outline:none;
+  transition:border-color .15s;min-width:120px;
+}
+.fg select:focus,.fg input:focus{border-color:var(--blue)}
+
+/* Period tabs */
+.period-tabs{display:flex;gap:4px;flex-wrap:wrap}
+.ptab{
+  padding:5px 12px;border:1.5px solid var(--border2);border-radius:6px;
+  font-size:12px;font-weight:600;cursor:pointer;
+  background:#fff;color:var(--muted);transition:all .15s;user-select:none;
+}
+.ptab.active{border-color:var(--blue);background:var(--blue);color:#fff}
+.ptab:hover:not(.active){border-color:var(--blue);color:var(--blue)}
+
+.apply-btn{
+  padding:7px 18px;background:var(--blue);color:#fff;
+  border:none;border-radius:6px;font-size:13px;font-weight:600;
+  cursor:pointer;transition:opacity .15s;
+}
+.apply-btn:hover{opacity:.85}
+.apply-btn:disabled{opacity:.4;cursor:not-allowed}
+.reset-btn{
+  padding:7px 12px;background:var(--card2);color:var(--muted);
+  border:1px solid var(--border);border-radius:6px;
+  font-size:13px;font-weight:600;cursor:pointer;
+}
+.custom-range{display:flex;gap:8px;align-items:flex-end}
+.custom-range.hidden{display:none}
+
+/* ─── KPI Cards ─── */
+.kpi-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:12px;margin-bottom:16px;
+}
+.kpi{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px 16px;
+  box-shadow:var(--shadow-sm);position:relative;overflow:hidden;
+  transition:transform .15s,box-shadow .15s;
+}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.kpi::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  border-radius:10px 10px 0 0;
+}
+.kpi.blue::before{background:var(--blue)}
+.kpi.green::before{background:var(--green)}
+.kpi.amber::before{background:var(--amber)}
+.kpi.purple::before{background:var(--purple)}
+.kpi.teal::before{background:var(--teal)}
+.kpi.indigo::before{background:var(--indigo)}
+.kpi-icon{font-size:20px;margin-bottom:6px}
+.kpi-val{font-size:26px;font-weight:800;letter-spacing:-.03em;color:var(--ink);line-height:1}
+.kpi-label{font-size:11.5px;color:var(--muted);margin-top:4px;font-weight:500}
+.kpi-sub{font-size:11px;color:var(--faint);margin-top:2px}
+
+/* ─── Section Heading ─── */
+.sec-hd{
+  display:flex;align-items:center;gap:8px;
+  margin:20px 0 10px;font-size:13px;font-weight:700;
+  color:var(--ink2);letter-spacing:-.01em;
+}
+.sec-hd .dot{
+  width:8px;height:8px;border-radius:2px;flex-shrink:0;
+}
+
+/* ─── Chart Cards ─── */
+.chart-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;
+  box-shadow:var(--shadow-sm);margin-bottom:16px;
+}
+.chart-card-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;flex-wrap:wrap;gap:8px;
+}
+.chart-card-hd h3{font-size:13px;font-weight:700;color:var(--ink2)}
+.chart-card-hd .sub{font-size:11.5px;color:var(--muted)}
+.chart-wrap{position:relative}
+.chart-wrap canvas{max-height:280px}
+
+/* ─── Two-col Layout ─── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+@media(max-width:700px){.two-col{grid-template-columns:1fr}}
+
+/* ─── Tables ─── */
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead tr{background:var(--card2)}
+thead th{
+  padding:9px 12px;text-align:left;font-size:11px;font-weight:700;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+thead th.num{text-align:right}
+tbody tr{transition:background .1s}
+tbody tr:hover{background:#f8fafc}
+tbody tr:not(:last-child) td{border-bottom:1px solid var(--border)}
+td{padding:8px 12px;color:var(--ink2);vertical-align:middle}
+td.num{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+td.name{font-weight:500}
+.bar-cell{display:flex;align-items:center;gap:8px}
+.inline-bar{height:6px;border-radius:3px;min-width:2px;transition:width .4s ease}
+.pct-tag{
+  font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:4px;
+}
+
+/* ─── Custom Fields Section ─── */
+.cf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.cf-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:14px;box-shadow:var(--shadow-sm);
+}
+.cf-card h4{
+  font-size:12px;font-weight:700;color:var(--ink2);
+  margin-bottom:10px;display:flex;align-items:center;gap:6px;
+}
+.cf-card h4 span{
+  background:var(--indigo-lt);color:var(--indigo);
+  font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;
+}
+.cf-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:5px 0;border-bottom:1px solid #f1f5f9;gap:8px;
+}
+.cf-row:last-child{border-bottom:none}
+.cf-name{font-size:12px;color:var(--ink3);flex:1;truncate:ellipsis;overflow:hidden;white-space:nowrap}
+.cf-bar-wrap{width:90px;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.cf-bar{height:100%;border-radius:3px;transition:width .5s ease}
+.cf-count{font-size:12px;font-weight:700;color:var(--ink);min-width:28px;text-align:right}
+
+/* ─── Empty / Loading ─── */
+.empty{
+  text-align:center;padding:48px 20px;color:var(--muted);
+}
+.empty-icon{font-size:36px;margin-bottom:10px}
+.empty p{font-size:13px}
+.shimmer{
+  background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);
+  background-size:400% 100%;animation:shimmer 1.4s infinite;
+  border-radius:6px;height:16px;
+}
+@keyframes shimmer{0%{background-position:100%}100%{background-position:-100%}}
+
+/* ─── Insights ─── */
+.insights-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+  gap:10px;margin-bottom:16px;
+}
+.insight-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:13px 15px;
+  box-shadow:var(--shadow-sm);display:flex;align-items:flex-start;gap:10px;
+}
+.insight-card .i-icon{font-size:18px;flex-shrink:0;padding-top:1px}
+.insight-card .i-body{flex:1}
+.insight-card .i-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.insight-card .i-val{font-size:15px;font-weight:800;color:var(--ink);margin-top:2px;letter-spacing:-.02em}
+.insight-card .i-sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+/* ─── Range label ─── */
+.range-label{
+  background:var(--indigo-lt);color:var(--indigo);
+  font-size:11.5px;font-weight:600;padding:4px 10px;
+  border-radius:6px;border:1px solid #c7d2fe;
+}
+
+/* ─── Placeholder state ─── */
+#main-content{display:none}
+#placeholder{
+  text-align:center;padding:60px 20px;
+}
+#placeholder .ph-icon{font-size:48px;margin-bottom:14px}
+#placeholder h2{font-size:16px;font-weight:700;color:var(--ink2);margin-bottom:6px}
+#placeholder p{font-size:13px;color:var(--muted);max-width:360px;margin:0 auto}
+
+/* ─── Tooltip override ─── */
+.chartjs-tooltip{pointer-events:none}
+
+/* ─── Animations ─── */
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.fade-up{animation:fadeUp .35s ease both}
+.fade-up.d1{animation-delay:.05s}
+.fade-up.d2{animation-delay:.1s}
+.fade-up.d3{animation-delay:.15s}
+.fade-up.d4{animation-delay:.2s}
+.fade-up.d5{animation-delay:.25s}
+.fade-up.d6{animation-delay:.3s}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<div class="app-header">
+  <div class="logo">📋</div>
+  <div class="titles">
+    <h1>Invoice Analytics</h1>
+    <div class="subtitle">Count &amp; breakdown across time, customers &amp; custom fields</div>
+  </div>
+  <span class="badge">GET · Read-Only 🔒</span>
+  <span class="badge" id="version-badge">v1.0</span>
+</div>
+
+<div class="main">
+
+  <!-- ═══ CONTROL BAR ═══ -->
+  <div class="ctrl-bar">
+    <button class="load-btn" id="load-btn" onclick="loadAllInvoices()">⬇ Load All Invoices</button>
+    <div class="progress-wrap"><div class="progress-bar" id="prog-bar"></div></div>
+    <span class="status-txt" id="status-txt">Press Load to fetch data from Manager</span>
+  </div>
+
+  <div class="err-box" id="err-box" style="display:none"></div>
+
+  <!-- ═══ FILTER PANEL ═══ -->
+  <div class="filter-panel" id="filter-panel">
+    <div class="fg">
+      <label>Period</label>
+      <div class="period-tabs">
+        <div class="ptab active" data-period="today" onclick="setPeriod(this)">Today</div>
+        <div class="ptab" data-period="week" onclick="setPeriod(this)">This Week</div>
+        <div class="ptab" data-period="month" onclick="setPeriod(this)">This Month</div>
+        <div class="ptab" data-period="year" onclick="setPeriod(this)">This Year</div>
+        <div class="ptab" data-period="all" onclick="setPeriod(this)">All Time</div>
+        <div class="ptab" data-period="custom" onclick="setPeriod(this)">Custom</div>
+      </div>
+    </div>
+    <div class="custom-range hidden" id="custom-range">
+      <div class="fg">
+        <label>From</label>
+        <input type="date" id="date-from">
+      </div>
+      <div class="fg">
+        <label>To</label>
+        <input type="date" id="date-to">
+      </div>
+    </div>
+    <div class="fg">
+      <label>Group By</label>
+      <select id="group-by">
+        <option value="day">Day</option>
+        <option value="week">Week</option>
+        <option value="month" selected>Month</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label>Customer Filter</label>
+      <select id="cust-filter" style="max-width:160px">
+        <option value="">All Customers</option>
+      </select>
+    </div>
+    <button class="apply-btn" id="apply-btn" onclick="applyFilters()" disabled>Apply</button>
+    <button class="reset-btn" onclick="resetFilters()">Reset</button>
+  </div>
+
+  <!-- ═══ PLACEHOLDER ═══ -->
+  <div id="placeholder">
+    <div class="ph-icon">📊</div>
+    <h2>Invoice Analytics Ready</h2>
+    <p>Click <strong>Load All Invoices</strong> above to fetch your invoice data from Manager.io and unlock all analytics.</p>
+  </div>
+
+  <!-- ═══ MAIN CONTENT ═══ -->
+  <div id="main-content">
+
+    <!-- Range label -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="range-label" id="range-label">All Time</div>
+      <span style="font-size:11.5px;color:var(--muted)" id="record-count-label"></span>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-grid" id="kpi-grid">
+      <div class="kpi blue fade-up"><div class="kpi-icon">📋</div><div class="kpi-val" id="k-total">—</div><div class="kpi-label">Total Invoices</div><div class="kpi-sub" id="k-total-sub"></div></div>
+      <div class="kpi green fade-up d1"><div class="kpi-icon">📅</div><div class="kpi-val" id="k-today">—</div><div class="kpi-label">Today</div><div class="kpi-sub" id="k-today-sub"></div></div>
+      <div class="kpi amber fade-up d2"><div class="kpi-icon">📆</div><div class="kpi-val" id="k-week">—</div><div class="kpi-label">This Week</div><div class="kpi-sub" id="k-week-sub"></div></div>
+      <div class="kpi purple fade-up d3"><div class="kpi-icon">🗓️</div><div class="kpi-val" id="k-month">—</div><div class="kpi-label">This Month</div><div class="kpi-sub" id="k-month-sub"></div></div>
+      <div class="kpi teal fade-up d4"><div class="kpi-icon">👥</div><div class="kpi-val" id="k-customers">—</div><div class="kpi-label">Unique Customers</div><div class="kpi-sub">in filtered range</div></div>
+      <div class="kpi indigo fade-up d5"><div class="kpi-icon">📈</div><div class="kpi-val" id="k-avg">—</div><div class="kpi-label">Avg / Day</div><div class="kpi-sub">in filtered range</div></div>
+    </div>
+
+    <!-- INSIGHTS ROW -->
+    <div class="insights-grid fade-up d2" id="insights-grid"></div>
+
+    <!-- INVOICE COUNT OVER TIME CHART -->
+    <div class="sec-hd"><div class="dot" style="background:var(--blue)"></div>Invoice Volume Over Time</div>
+    <div class="chart-card fade-up">
+      <div class="chart-card-hd">
+        <div>
+          <h3 id="timeline-chart-title">Invoice Count by Month</h3>
+          <div class="sub" id="timeline-chart-sub"></div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="timeline-chart"></canvas></div>
+    </div>
+
+    <!-- CUSTOMER BREAKDOWN -->
+    <div class="sec-hd"><div class="dot" style="background:var(--green)"></div>Customer Breakdown</div>
+    <div class="two-col fade-up">
+      <div class="chart-card">
+        <div class="chart-card-hd"><h3>Top Customers by Invoice Count</h3></div>
+        <div class="chart-wrap"><canvas id="cust-chart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-hd">
+          <h3>All Customers</h3>
+          <span class="sub" id="cust-tbl-sub"></span>
+        </div>
+        <div class="tbl-wrap" id="cust-tbl-wrap">
+          <table id="cust-tbl">
+            <thead><tr>
+              <th>#</th>
+              <th>Customer</th>
+              <th class="num">Invoices</th>
+              <th class="num">Share</th>
+              <th style="width:100px">Bar</th>
+            </tr></thead>
+            <tbody id="cust-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CUSTOM FIELDS BREAKDOWN -->
+    <div class="sec-hd" id="cf-section-hd" style="display:none">
+      <div class="dot" style="background:var(--indigo)"></div>
+      Custom Fields Breakdown
+    </div>
+    <div class="cf-grid fade-up" id="cf-grid"></div>
+
+    <!-- DAILY DETAIL TABLE -->
+    <div class="sec-hd"><div class="dot" style="background:var(--amber)"></div>Invoice List by Period</div>
+    <div class="chart-card fade-up">
+      <div class="chart-card-hd">
+        <h3 id="detail-tbl-title">Invoice Count — Grouped</h3>
+        <span class="sub" id="detail-tbl-sub"></span>
+      </div>
+      <div class="tbl-wrap">
+        <table id="detail-tbl">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th class="num">Invoice Count</th>
+              <th class="num">Cumulative</th>
+              <th style="width:140px">Trend</th>
+            </tr>
+          </thead>
+          <tbody id="detail-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /main-content -->
+</div><!-- /main -->
+
+<script>
+/* ═══════════════════════════════════════════════════
+   MANAGER.IO EXTENSION — INVOICE ANALYTICS v1.0
+   Read-only · postMessage bridge · paginated fetch
+═══════════════════════════════════════════════════ */
+
+/* ── State ── */
+let allInvoices = [];
+let filteredInvoices = [];
+let trustedOrigin = null;
+let isLoading = false;
+let pendingResolve = null;
+let pendingReject = null;
+let currentPeriod = 'all';
+let timelineChart = null;
+let custChart = null;
+
+/* ── postMessage bridge ── */
+window.addEventListener('message', function(e) {
+  // Origin lock
+  if (trustedOrigin && e.origin !== trustedOrigin) return;
+
+  const d = e.data;
+  if (!d) return;
+
+  // First response establishes trusted origin
+  if (!trustedOrigin && (d.data !== undefined || d.error !== undefined)) {
+    trustedOrigin = e.origin;
+  }
+
+  if (pendingResolve) {
+    const resolve = pendingResolve;
+    pendingResolve = null;
+    pendingReject = null;
+    resolve(d);
+  }
+});
+
+function apiGet(path) {
+  return new Promise((resolve, reject) => {
+    pendingResolve = resolve;
+    pendingReject = reject;
+    const timeout = setTimeout(() => {
+      pendingResolve = null;
+      pendingReject = null;
+      reject(new Error('Request timed out — is this running inside Manager.io?'));
+    }, 30000);
+    const _resolve = resolve;
+    pendingResolve = (data) => { clearTimeout(timeout); _resolve(data); };
+    window.parent.postMessage({ query: path }, '*');
+  });
+}
+
+/* ── Load All Invoices ── */
+async function loadAllInvoices() {
+  if (isLoading) return;
+  isLoading = true;
+
+  const btn = document.getElementById('load-btn');
+  const prog = document.getElementById('prog-bar');
+  const status = document.getElementById('status-txt');
+  const errBox = document.getElementById('err-box');
+
+  btn.disabled = true;
+  errBox.style.display = 'none';
+  allInvoices = [];
+  setProgress(5, 'Connecting to Manager.io…');
+
+  try {
+    let pageToken = null;
+    let page = 0;
+
+    while (true) {
+      page++;
+      const path = pageToken
+        ? `/api4/batch-sales-invoice?pageToken=${encodeURIComponent(pageToken)}`
+        : `/api4/batch-sales-invoice`;
+
+      setProgress(Math.min(5 + page * 8, 85), `Loading page ${page}…`);
+
+      const resp = await apiGet(path);
+
+      if (resp.error) throw new Error(resp.error);
+
+      const records = resp.data || [];
+      allInvoices = allInvoices.concat(records);
+
+      pageToken = resp.nextPageToken || resp.next_page_token || null;
+      if (!pageToken || records.length === 0) break;
+    }
+
+    setProgress(100, `✓ Loaded ${allInvoices.length} invoices`);
+
+    // Populate customer filter dropdown
+    populateCustomerFilter();
+
+    // Enable UI
+    document.getElementById('apply-btn').disabled = false;
+    document.getElementById('main-content').style.display = 'block';
+    document.getElementById('placeholder').style.display = 'none';
+
+    // Default: show all time, grouped by month
+    currentPeriod = 'all';
+    document.querySelector('[data-period="all"]').classList.add('active');
+    document.querySelector('[data-period="today"]').classList.remove('active');
+    applyFilters();
+
+  } catch (err) {
+    errBox.textContent = '⚠ ' + err.message;
+    errBox.style.display = 'block';
+    setProgress(0, 'Error — see message above');
+  }
+
+  isLoading = false;
+  btn.disabled = false;
+  btn.textContent = '↻ Reload';
+}
+
+function setProgress(pct, msg) {
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('status-txt').textContent = msg;
+}
+
+/* ── Period helpers ── */
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getDateRange(period) {
+  const now = new Date();
+  const today = todayStr();
+
+  if (period === 'today') {
+    return { from: today, to: today };
+  }
+  if (period === 'week') {
+    const d = new Date(now);
+    const day = d.getDay(); // 0=Sun
+    const diffToMon = (day === 0 ? -6 : 1 - day);
+    d.setDate(d.getDate() + diffToMon);
+    const from = d.toISOString().slice(0, 10);
+    return { from, to: today };
+  }
+  if (period === 'month') {
+    const from = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    return { from, to: today };
+  }
+  if (period === 'year') {
+    const from = `${now.getFullYear()}-01-01`;
+    return { from, to: today };
+  }
+  if (period === 'custom') {
+    return {
+      from: document.getElementById('date-from').value || '2000-01-01',
+      to: document.getElementById('date-to').value || today
+    };
+  }
+  return { from: '2000-01-01', to: '9999-12-31' }; // all
+}
+
+function setPeriod(el) {
+  document.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  currentPeriod = el.dataset.period;
+  const cr = document.getElementById('custom-range');
+  cr.classList.toggle('hidden', currentPeriod !== 'custom');
+}
+
+function resetFilters() {
+  setPeriod(document.querySelector('[data-period="all"]'));
+  document.getElementById('cust-filter').value = '';
+  document.getElementById('group-by').value = 'month';
+  if (allInvoices.length) applyFilters();
+}
+
+/* ── Populate customer dropdown ── */
+function populateCustomerFilter() {
+  const sel = document.getElementById('cust-filter');
+  const customers = [...new Set(allInvoices.map(inv => getCustomer(inv)).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All Customers</option>';
+  customers.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+}
+
+/* ── Get invoice date string ── */
+function getDate(inv) {
+  return inv.date || inv.Date || inv.IssueDate || inv.issueDate || '';
+}
+
+/* ── Get customer name ── */
+function getCustomer(inv) {
+  return inv.customer || inv.Customer || inv.CustomerName || inv.customerName || '';
+}
+
+/* ── Detect custom fields ── */
+function detectCustomFields(invoices) {
+  const knownKeys = new Set([
+    'date','Date','issueDate','IssueDate','dueDate','DueDate',
+    'customer','Customer','CustomerName','customerName',
+    'reference','Reference','number','Number','invoiceNumber',
+    'currency','Currency','exchangeRate','ExchangeRate',
+    'total','Total','amount','Amount','subtotal','Subtotal',
+    'tax','Tax','status','Status','paid','Paid',
+    'description','Description','lines','Lines','items','Items',
+    'key','Key','uuid','Uuid','id','Id',
+    'nextPageToken','next_page_token',
+    'supplier','Supplier','division','Division',
+    'billingAddress','BillingAddress','notes','Notes',
+    'paymentTerms','PaymentTerms','contactPerson','ContactPerson',
+    'createdDate','CreatedDate','modifiedDate','ModifiedDate',
+    'locked','Locked','void','Void','draft','Draft',
+    'baseCurrency','BaseCurrency','baseAmount','BaseAmount',
+    'discount','Discount','shipping','Shipping',
+    'purchaseOrderNumber','PurchaseOrderNumber'
+  ]);
+
+  const cfMap = {}; // key -> Set of values
+  invoices.forEach(inv => {
+    Object.keys(inv).forEach(k => {
+      if (knownKeys.has(k)) return;
+      if (k.startsWith('_') || k.startsWith('$')) return;
+      const val = inv[k];
+      if (val === null || val === undefined) return;
+      if (typeof val === 'object') return;
+      if (!cfMap[k]) cfMap[k] = {};
+      const sv = String(val).trim();
+      if (!sv) return;
+      cfMap[k][sv] = (cfMap[k][sv] || 0) + 1;
+    });
+  });
+
+  // Remove fields with only one unique value (boring) or > 60 unique values (probably an ID)
+  return Object.entries(cfMap)
+    .filter(([k, vmap]) => {
+      const uniqueCount = Object.keys(vmap).length;
+      return uniqueCount >= 2 && uniqueCount <= 60;
+    })
+    .map(([k, vmap]) => ({
+      key: k,
+      label: camelToLabel(k),
+      values: Object.entries(vmap).sort((a,b) => b[1]-a[1])
+    }));
+}
+
+function camelToLabel(key) {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/[_-]+/g, ' ')
+    .replace(/^\s/, '')
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .trim();
+}
+
+/* ── Group by helper ── */
+function getPeriodKey(dateStr, groupBy) {
+  if (!dateStr) return 'Unknown';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d)) return 'Unknown';
+  if (groupBy === 'day') return dateStr;
+  if (groupBy === 'week') {
+    // ISO week: Monday-based
+    const tmp = new Date(d);
+    const day = tmp.getDay();
+    const diff = (day === 0 ? -6 : 1 - day);
+    tmp.setDate(tmp.getDate() + diff);
+    return 'Wk ' + tmp.toISOString().slice(0, 10);
+  }
+  if (groupBy === 'month') {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  }
+  return dateStr;
+}
+
+function formatPeriodLabel(key, groupBy) {
+  if (groupBy === 'day') {
+    const d = new Date(key + 'T00:00:00');
+    return isNaN(d) ? key : d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  }
+  if (groupBy === 'week') return key;
+  if (groupBy === 'month') {
+    const [y, m] = key.split('-');
+    const d = new Date(+y, +m-1, 1);
+    return d.toLocaleDateString(undefined, { month:'long', year:'numeric' });
+  }
+  return key;
+}
+
+/* ── APPLY FILTERS & RENDER ── */
+function applyFilters() {
+  const period = currentPeriod;
+  const { from, to } = getDateRange(period);
+  const custFilter = document.getElementById('cust-filter').value;
+  const groupBy = document.getElementById('group-by').value;
+
+  filteredInvoices = allInvoices.filter(inv => {
+    const d = getDate(inv);
+    if (!d) return false;
+    if (d < from || d > to) return false;
+    if (custFilter && getCustomer(inv) !== custFilter) return false;
+    return true;
+  });
+
+  renderRangeLabel(from, to, period);
+  renderKPIs();
+  renderInsights(from, to, groupBy);
+  renderTimelineChart(filteredInvoices, groupBy);
+  renderCustomerBreakdown(filteredInvoices);
+  renderCustomFields(filteredInvoices);
+  renderDetailTable(filteredInvoices, groupBy);
+
+  document.getElementById('record-count-label').textContent =
+    `${filteredInvoices.length} invoice${filteredInvoices.length !== 1 ? 's' : ''} in range`;
+}
+
+/* ── Range label ── */
+function renderRangeLabel(from, to, period) {
+  const labels = {
+    today:'Today', week:'This Week', month:'This Month',
+    year:'This Year', all:'All Time', custom:'Custom Range'
+  };
+  let txt = labels[period] || 'Custom Range';
+  if (period === 'custom' || period === 'all') {
+    txt += ` · ${from === '2000-01-01' ? 'Earliest' : from} → ${to === '9999-12-31' ? 'Latest' : to}`;
+  }
+  document.getElementById('range-label').textContent = txt;
+}
+
+/* ── KPIs ── */
+function renderKPIs() {
+  const today = todayStr();
+  const now = new Date();
+
+  // Week range
+  const wd = new Date(now);
+  const dday = wd.getDay();
+  const diffToMon = (dday === 0 ? -6 : 1 - dday);
+  wd.setDate(wd.getDate() + diffToMon);
+  const weekFrom = wd.toISOString().slice(0, 10);
+
+  // Month range
+  const monthFrom = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+
+  const totalInFiltered = filteredInvoices.length;
+  const todayCount = allInvoices.filter(i => getDate(i) === today).length;
+  const weekCount = allInvoices.filter(i => {const d=getDate(i);return d>=weekFrom&&d<=today;}).length;
+  const monthCount = allInvoices.filter(i => {const d=getDate(i);return d>=monthFrom&&d<=today;}).length;
+
+  const custSet = new Set(filteredInvoices.map(i => getCustomer(i)).filter(Boolean));
+  const uniqueCust = custSet.size;
+
+  // Avg per day in range
+  const allDates = filteredInvoices.map(i => getDate(i)).filter(Boolean);
+  const uniqueDays = new Set(allDates).size;
+  const avgPerDay = uniqueDays > 0 ? (totalInFiltered / uniqueDays).toFixed(1) : '0';
+
+  document.getElementById('k-total').textContent = totalInFiltered;
+  document.getElementById('k-total-sub').textContent = `of ${allInvoices.length} total`;
+  document.getElementById('k-today').textContent = todayCount;
+  document.getElementById('k-today-sub').textContent = today;
+  document.getElementById('k-week').textContent = weekCount;
+  document.getElementById('k-week-sub').textContent = `from ${weekFrom}`;
+  document.getElementById('k-month').textContent = monthCount;
+  document.getElementById('k-month-sub').textContent = `from ${monthFrom}`;
+  document.getElementById('k-customers').textContent = uniqueCust;
+  document.getElementById('k-avg').textContent = avgPerDay;
+}
+
+/* ── Insights ── */
+function renderInsights(from, to, groupBy) {
+  const grid = document.getElementById('insights-grid');
+
+  // Group by period
+  const grouped = {};
+  filteredInvoices.forEach(inv => {
+    const k = getPeriodKey(getDate(inv), groupBy);
+    grouped[k] = (grouped[k] || 0) + 1;
+  });
+
+  const entries = Object.entries(grouped).sort((a,b) => a[0].localeCompare(b[0]));
+  if (!entries.length) { grid.innerHTML = ''; return; }
+
+  const counts = entries.map(e => e[1]);
+  const maxCount = Math.max(...counts);
+  const minCount = Math.min(...counts);
+  const bestEntry = entries.find(e => e[1] === maxCount);
+  const worstEntry = entries.find(e => e[1] === minCount);
+  const totalDays = new Set(filteredInvoices.map(i => getDate(i))).size;
+
+  // Top customer
+  const custMap = {};
+  filteredInvoices.forEach(inv => {
+    const c = getCustomer(inv);
+    if (c) custMap[c] = (custMap[c] || 0) + 1;
+  });
+  const topCust = Object.entries(custMap).sort((a,b) => b[1]-a[1])[0];
+
+  const insights = [
+    { icon:'🏆', title:'Best Period', val: formatPeriodLabel(bestEntry[0], groupBy), sub: `${bestEntry[1]} invoices` },
+    { icon:'📉', title:'Quietest Period', val: formatPeriodLabel(worstEntry[0], groupBy), sub: `${worstEntry[1]} invoices` },
+    { icon:'📅', title:'Active Days', val: totalDays, sub: 'days with invoices' },
+    topCust ? { icon:'⭐', title:'Top Customer', val: topCust[0], sub: `${topCust[1]} invoices` } : null
+  ].filter(Boolean);
+
+  grid.innerHTML = insights.map(i => `
+    <div class="insight-card">
+      <div class="i-icon">${i.icon}</div>
+      <div class="i-body">
+        <div class="i-title">${i.title}</div>
+        <div class="i-val">${i.val}</div>
+        <div class="i-sub">${i.sub}</div>
+      </div>
+    </div>`).join('');
+}
+
+/* ── Timeline Chart ── */
+function renderTimelineChart(invoices, groupBy) {
+  const grouped = {};
+  invoices.forEach(inv => {
+    const k = getPeriodKey(getDate(inv), groupBy);
+    grouped[k] = (grouped[k] || 0) + 1;
+  });
+
+  const labels = Object.keys(grouped).sort();
+  const data = labels.map(l => grouped[l]);
+  const displayLabels = labels.map(l => formatPeriodLabel(l, groupBy));
+
+  const title = `Invoice Count by ${groupBy.charAt(0).toUpperCase()+groupBy.slice(1)}`;
+  document.getElementById('timeline-chart-title').textContent = title;
+  document.getElementById('timeline-chart-sub').textContent = `${invoices.length} invoices across ${labels.length} ${groupBy}s`;
+
+  const ctx = document.getElementById('timeline-chart');
+  if (timelineChart) timelineChart.destroy();
+
+  const maxVal = Math.max(...data, 1);
+  const colors = data.map(v => {
+    const ratio = v / maxVal;
+    if (ratio >= 0.8) return '#2563eb';
+    if (ratio >= 0.5) return '#3b82f6';
+    return '#93c5fd';
+  });
+
+  timelineChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: displayLabels,
+      datasets: [{
+        label: 'Invoices',
+        data,
+        backgroundColor: colors,
+        borderRadius: 5,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: i => i[0].label,
+            label: i => ` ${i.raw} invoice${i.raw !== 1 ? 's' : ''}`
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 11 }, maxRotation: 45 }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1,
+            callback: v => Number.isInteger(v) ? v : ''
+          },
+          grid: { color: '#f1f5f9' }
+        }
+      }
+    }
+  });
+}
+
+/* ── Customer Breakdown ── */
+function renderCustomerBreakdown(invoices) {
+  const custMap = {};
+  invoices.forEach(inv => {
+    const c = getCustomer(inv) || '(No Customer)';
+    custMap[c] = (custMap[c] || 0) + 1;
+  });
+
+  const sorted = Object.entries(custMap).sort((a,b) => b[1]-a[1]);
+  const total = invoices.length || 1;
+  const top15 = sorted.slice(0, 15);
+
+  document.getElementById('cust-tbl-sub').textContent = `${sorted.length} customers`;
+
+  // Bar chart (top 12)
+  const top12 = sorted.slice(0, 12);
+  const ctx = document.getElementById('cust-chart');
+  if (custChart) custChart.destroy();
+
+  const palette = ['#2563eb','#16a34a','#d97706','#7c3aed','#0d9488','#dc2626',
+                   '#4338ca','#0891b2','#84cc16','#f59e0b','#ef4444','#8b5cf6'];
+
+  custChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top12.map(([n]) => n.length > 20 ? n.slice(0,18)+'…' : n),
+      datasets: [{
+        label: 'Invoices',
+        data: top12.map(([,c]) => c),
+        backgroundColor: palette,
+        borderRadius: 4,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: { stepSize: 1, callback: v => Number.isInteger(v) ? v : '' },
+          grid: { color: '#f1f5f9' }
+        },
+        y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+      }
+    }
+  });
+
+  // Table
+  const tbody = document.getElementById('cust-tbody');
+  const maxCount = sorted[0]?.[1] || 1;
+  tbody.innerHTML = top15.map(([name, count], i) => {
+    const pct = ((count / total) * 100).toFixed(1);
+    const barW = Math.round((count / maxCount) * 100);
+    const color = palette[i % palette.length];
+    return `<tr>
+      <td style="color:var(--faint);font-size:11px">${i+1}</td>
+      <td class="name">${escHtml(name)}</td>
+      <td class="num">${count}</td>
+      <td class="num">
+        <span class="pct-tag" style="background:${color}22;color:${color}">${pct}%</span>
+      </td>
+      <td>
+        <div class="bar-cell">
+          <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${barW}%;background:${color};border-radius:3px"></div>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No data</td></tr>';
+}
+
+/* ── Custom Fields ── */
+function renderCustomFields(invoices) {
+  const cfFields = detectCustomFields(invoices);
+  const grid = document.getElementById('cf-grid');
+  const hd = document.getElementById('cf-section-hd');
+
+  if (!cfFields.length) {
+    hd.style.display = 'none';
+    grid.innerHTML = '';
+    return;
+  }
+
+  hd.style.display = 'flex';
+
+  const cfColors = ['#2563eb','#16a34a','#d97706','#7c3aed','#0d9488','#4338ca','#dc2626','#0891b2'];
+
+  grid.innerHTML = cfFields.map((cf, ci) => {
+    const color = cfColors[ci % cfColors.length];
+    const topVals = cf.values.slice(0, 10);
+    const maxCount = topVals[0]?.[1] || 1;
+
+    const rows = topVals.map(([val, count]) => {
+      const barW = Math.round((count / maxCount) * 100);
+      return `<div class="cf-row">
+        <div class="cf-name" title="${escHtml(val)}">${escHtml(val)}</div>
+        <div class="cf-bar-wrap">
+          <div class="cf-bar" style="width:${barW}%;background:${color}"></div>
+        </div>
+        <div class="cf-count">${count}</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="cf-card">
+      <h4>${escHtml(cf.label)} <span>${cf.values.length} values</span></h4>
+      ${rows}
+    </div>`;
+  }).join('');
+}
+
+/* ── Detail Table ── */
+function renderDetailTable(invoices, groupBy) {
+  const grouped = {};
+  invoices.forEach(inv => {
+    const k = getPeriodKey(getDate(inv), groupBy);
+    grouped[k] = (grouped[k] || 0) + 1;
+  });
+
+  const entries = Object.entries(grouped).sort((a,b) => a[0].localeCompare(b[0]));
+  const max = Math.max(...entries.map(e=>e[1]), 1);
+
+  document.getElementById('detail-tbl-title').textContent =
+    `Invoice Count — Grouped by ${groupBy.charAt(0).toUpperCase()+groupBy.slice(1)}`;
+  document.getElementById('detail-tbl-sub').textContent = `${entries.length} periods`;
+
+  let cumulative = 0;
+  const tbody = document.getElementById('detail-tbody');
+
+  tbody.innerHTML = entries.map(([key, count]) => {
+    cumulative += count;
+    const barW = Math.round((count / max) * 100);
+    const label = formatPeriodLabel(key, groupBy);
+    return `<tr>
+      <td class="name">${escHtml(label)}</td>
+      <td class="num">${count}</td>
+      <td class="num" style="color:var(--muted)">${cumulative}</td>
+      <td>
+        <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${barW}%;background:var(--blue);border-radius:4px;transition:width .4s"></div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:16px">No invoices in this range</td></tr>';
+}
+
+/* ── Utility ── */
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+/* ── Init ── */
+(function init() {
+  // Set today's date as default for custom range
+  const today = todayStr();
+  document.getElementById('date-to').value = today;
+  const d = new Date(); d.setMonth(d.getMonth() - 1);
+  document.getElementById('date-from').value = d.toISOString().slice(0, 10);
+})();
+</script>
+</body>
+</html>
