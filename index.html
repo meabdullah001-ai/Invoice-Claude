@@ -4,149 +4,148 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <!--
-  CSP: connect-src * is required so fetch() can reach the Manager.io API.
-  Origin-locking happens in JS after the first valid manager-context message.
+  connect-src 'none' is CORRECT — we use postMessage proxy, never direct fetch()
+  Manager.io receives our postMessage, makes the API call itself, and posts the response back
 -->
 <meta http-equiv="Content-Security-Policy"
-  content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; connect-src *; frame-ancestors *;">
+  content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline'; connect-src 'none'; frame-ancestors *;">
 <title>Invoice Analytics — Manager.io</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
+/* ─── Reset ─── */
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --ink:#0f172a;--ink2:#1e293b;--ink3:#334155;
-  --muted:#64748b;--faint:#94a3b8;
-  --border:#e2e8f0;--border2:#cbd5e1;
-  --bg:#f1f5f9;--card:#fff;--card2:#f8fafc;
-  --blue:#2563eb;--blue-dk:#1d4ed8;
-  --green:#16a34a;--amber:#d97706;--purple:#7c3aed;
-  --teal:#0d9488;--red:#dc2626;--indigo:#4338ca;
-  --r:10px;--sh:0 1px 3px rgba(0,0,0,.07);
-  --sh2:0 1px 4px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.06);
+  --blue:#1d6fcf;   --blue-dk:#155fa0; --blue-lt:#dbeafe;
+  --green:#16a34a;  --green-lt:#dcfce7;
+  --amber:#d97706;  --amber-lt:#fef3c7;
+  --purple:#7c3aed; --purple-lt:#ede9fe;
+  --teal:#0d9488;   --teal-lt:#ccfbf1;
+  --red:#dc2626;    --red-lt:#fee2e2;
+  --indigo:#4338ca; --indigo-lt:#e0e7ff;
+  --ink:#1e293b;    --ink2:#334155;    --muted:#64748b; --faint:#94a3b8;
+  --bg:#f8fafc;     --card:#fff;       --light:#f1f5f9;
+  --border:#e2e8f0; --border2:#cbd5e1;
+  --r:10px; --sh:0 1px 3px rgba(0,0,0,.07); --sh2:0 2px 8px rgba(0,0,0,.1);
 }
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:13.5px;line-height:1.5}
 
-/* Header */
-.hdr{background:linear-gradient(135deg,#0f172a,#1e3a5f);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:11px;flex-wrap:wrap}
-.hdr-ico{width:35px;height:35px;border-radius:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
-.hdr h1{font-size:15px;font-weight:700;letter-spacing:-.02em}
-.hdr p{font-size:11px;color:rgba(255,255,255,.5);margin-top:1px}
-.hdr-titles{flex:1}
-.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.05em}
-#conn-dot{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:700;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.65);transition:all .3s}
-#conn-dot.ok{background:rgba(22,163,74,.25);border-color:rgba(134,239,172,.4);color:#86efac}
-#conn-dot.err{background:rgba(220,38,38,.25);border-color:rgba(252,165,165,.4);color:#fca5a5}
+/* ── Header ── */
+.hdr{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);color:#fff;padding:13px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.hdr-ico{width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.hdr-t{flex:1}
+.hdr-t h1{font-size:16px;font-weight:700;letter-spacing:-.02em}
+.hdr-t p{font-size:11px;color:rgba(255,255,255,.5);margin-top:1px}
+.hdr-badge{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.05em}
+#conn-pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.65);transition:all .3s}
+#conn-pill.ok{background:rgba(22,163,74,.3);border-color:rgba(134,239,172,.5);color:#86efac}
+#conn-pill.err{background:rgba(220,38,38,.3);border-color:rgba(252,165,165,.5);color:#fca5a5}
 
-/* Layout */
-.main{padding:13px}
+/* ── Layout ── */
+.wrap{padding:14px}
 
-/* Control bar */
-.ctrl{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:10px 13px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;box-shadow:var(--sh);margin-bottom:11px}
-.btn-pri{padding:7px 17px;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;background:var(--blue);color:#fff;transition:background .15s,transform .1s}
-.btn-pri:hover:not(:disabled){background:var(--blue-dk)}
-.btn-pri:active:not(:disabled){transform:scale(.97)}
-.btn-pri:disabled{opacity:.4;cursor:not-allowed}
-.btn-sec{padding:6px 11px;background:var(--card2);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
-.prog-wrap{flex:1;min-width:60px;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
-.prog-bar{height:100%;width:0%;background:var(--blue);border-radius:3px;transition:width .3s}
-.status-txt{font-size:12px;color:var(--muted);white-space:nowrap}
+/* ── Control bar ── */
+.ctrl{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:11px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;box-shadow:var(--sh);margin-bottom:12px}
+.btn-load{padding:7px 18px;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;background:var(--blue);color:#fff;transition:background .15s,transform .1s;white-space:nowrap}
+.btn-load:hover:not(:disabled){background:var(--blue-dk)}
+.btn-load:active:not(:disabled){transform:scale(.97)}
+.btn-load:disabled{opacity:.4;cursor:not-allowed}
+.prog-bg{flex:1;min-width:80px;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;width:0%;background:var(--blue);border-radius:3px;transition:width .25s}
+.stat-txt{font-size:12px;color:var(--muted);white-space:nowrap}
 
-/* Error / setup */
-.err-box{background:#fee2e2;border:1px solid #fca5a5;color:var(--red);border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:11px}
-.setup-box{background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--r);padding:15px;margin-bottom:11px;font-size:13px}
-.setup-box h3{color:#92400e;font-size:13px;font-weight:700;margin-bottom:7px}
-.setup-box ol{margin-left:17px;color:#78350f;line-height:1.9}
-.setup-box code{background:#fef3c7;padding:1px 5px;border-radius:4px;font-size:12px}
+/* ── Error ── */
+.errbox{background:var(--red-lt);border:1px solid #fca5a5;color:var(--red);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:12px}
 
-/* Filter panel */
-.flt{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:12px 13px;display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;box-shadow:var(--sh);margin-bottom:11px}
+/* ── Filter panel ── */
+.flt{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;box-shadow:var(--sh);margin-bottom:12px}
 .fg{display:flex;flex-direction:column;gap:3px}
 .fg label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.fg select,.fg input[type=date]{padding:5px 9px;border:1px solid var(--border2);border-radius:6px;font-size:12.5px;color:var(--ink);background:#fff;outline:none;transition:border-color .15s;min-width:108px}
+.fg select,.fg input[type=date]{padding:6px 10px;border:1px solid var(--border2);border-radius:6px;font-size:13px;color:var(--ink);background:#fff;outline:none;transition:border-color .15s;min-width:120px}
 .fg select:focus,.fg input:focus{border-color:var(--blue)}
 .ptabs{display:flex;gap:3px;flex-wrap:wrap}
-.pt{padding:5px 10px;border:1.5px solid var(--border2);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--muted);transition:all .15s;user-select:none}
+.pt{padding:5px 11px;border:1.5px solid var(--border2);border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:var(--muted);transition:all .15s;user-select:none}
 .pt.on{border-color:var(--blue);background:var(--blue);color:#fff}
 .pt:hover:not(.on){border-color:var(--blue);color:var(--blue)}
 .cr{display:flex;gap:7px;align-items:flex-end}
 .cr.hide{display:none}
-/* Dynamic CF filters row */
-.cf-flt-row{width:100%;display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;padding-top:9px;border-top:1px dashed var(--border);margin-top:4px}
-.cf-flt-row.hide{display:none}
-.cf-flt-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;align-self:center}
+.btn-apply{padding:6px 16px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.btn-apply:hover{opacity:.85}
+.btn-apply:disabled{opacity:.4;cursor:not-allowed}
+.btn-reset{padding:6px 11px;background:var(--light);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:13px;font-weight:600;cursor:pointer}
+/* Divider row for extra filters */
+.flt-extra{width:100%;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding-top:10px;border-top:1px dashed var(--border);margin-top:2px}
+.flt-extra-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;align-self:center}
 
-/* KPIs */
-.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:9px;margin-bottom:13px}
-.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:12px 13px;box-shadow:var(--sh);position:relative;overflow:hidden;transition:transform .15s,box-shadow .15s}
+/* ── KPI grid ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px 14px;box-shadow:var(--sh);position:relative;overflow:hidden;transition:transform .15s,box-shadow .15s}
 .kpi:hover{transform:translateY(-2px);box-shadow:var(--sh2)}
 .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0}
-.kpi.bl::before{background:var(--blue)}.kpi.gr::before{background:var(--green)}.kpi.am::before{background:var(--amber)}.kpi.pu::before{background:var(--purple)}.kpi.te::before{background:var(--teal)}.kpi.in::before{background:var(--indigo)}
-.ki{font-size:18px;margin-bottom:4px}
-.kv{font-size:24px;font-weight:800;letter-spacing:-.03em;line-height:1}
-.kl{font-size:10.5px;color:var(--muted);margin-top:3px;font-weight:500}
-.ks{font-size:10px;color:var(--faint);margin-top:1px}
+.kpi.c0::before{background:var(--blue)}.kpi.c1::before{background:var(--green)}.kpi.c2::before{background:var(--amber)}.kpi.c3::before{background:var(--purple)}.kpi.c4::before{background:var(--teal)}.kpi.c5::before{background:var(--indigo)}
+.ki{font-size:19px;margin-bottom:4px}.kv{font-size:25px;font-weight:800;letter-spacing:-.03em;line-height:1}.kl{font-size:11px;color:var(--muted);margin-top:3px;font-weight:500}.ks{font-size:10.5px;color:var(--faint);margin-top:1px}
 
-/* Section headings */
-.sh{display:flex;align-items:center;gap:7px;margin:17px 0 8px;font-size:13px;font-weight:700;color:var(--ink2)}
-.sh-d{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+/* ── Section headings ── */
+.sh{display:flex;align-items:center;gap:7px;margin:18px 0 9px;font-size:13px;font-weight:700;color:var(--ink2)}
+.sh-d{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 
-/* Chart cards */
-.cc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px;box-shadow:var(--sh);margin-bottom:13px}
-.cc-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;flex-wrap:wrap;gap:5px}
-.cc-h h3{font-size:13px;font-weight:700;color:var(--ink2)}
-.cc-h .sub{font-size:11.5px;color:var(--muted)}
-canvas{max-height:255px}
+/* ── Chart cards ── */
+.cc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px;box-shadow:var(--sh);margin-bottom:14px}
+.cc-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:6px}
+.cc-hd h3{font-size:13px;font-weight:700;color:var(--ink2)}
+.cc-hd .sub{font-size:11.5px;color:var(--muted)}
+canvas{max-height:260px}
 
-/* Two-col */
-.two{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:13px}
-@media(max-width:660px){.two{grid-template-columns:1fr}}
+/* ── Two-col grid ── */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+@media(max-width:680px){.two{grid-template-columns:1fr}}
 
-/* Tables */
+/* ── Tables ── */
 .tw{overflow-x:auto;border-radius:7px;border:1px solid var(--border)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
-thead th{padding:7px 10px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);background:var(--card2);white-space:nowrap}
+thead th{padding:8px 11px;text-align:left;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);background:var(--light);white-space:nowrap}
 th.r,td.r{text-align:right}
-tbody tr:hover{background:#f8fafc}
+tbody tr:hover{background:var(--light)}
 tbody tr:not(:last-child) td{border-bottom:1px solid var(--border)}
-td{padding:6px 10px;color:var(--ink2)}
+td{padding:7px 11px;color:var(--ink2)}
 td.nm{font-weight:500}
-td.nv{font-weight:600;font-variant-numeric:tabular-nums}
+td.nv{font-weight:700;font-variant-numeric:tabular-nums}
 .pill{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px}
 
-/* CF breakdown cards */
-.cf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:11px}
-.cfc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:12px;box-shadow:var(--sh)}
-.cfc h4{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:8px;display:flex;align-items:center;gap:5px}
-.cfc h4 em{background:#e0e7ff;color:#4338ca;font-size:9.5px;padding:1px 6px;border-radius:4px;font-weight:700;font-style:normal}
-.cfr{display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #f1f5f9}
+/* ── CF breakdown cards ── */
+.cf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-bottom:14px}
+.cfc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:13px;box-shadow:var(--sh)}
+.cfc h4{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:9px;display:flex;align-items:center;gap:6px}
+.cfc h4 em{background:var(--indigo-lt);color:var(--indigo);font-size:9.5px;padding:1px 6px;border-radius:4px;font-weight:700;font-style:normal}
+.cfr{display:flex;align-items:center;gap:7px;padding:4px 0;border-bottom:1px solid #f1f5f9}
 .cfr:last-child{border-bottom:none}
-.cfr-n{font-size:12px;color:var(--ink3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cfr-bg{width:75px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0}
+.cfr-n{font-size:12px;color:var(--ink2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cfr-bg{width:80px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0}
 .cfr-bar{height:100%;border-radius:3px;transition:width .5s}
-.cfr-c{font-size:11.5px;font-weight:700;min-width:22px;text-align:right}
+.cfr-c{font-size:12px;font-weight:700;min-width:24px;text-align:right}
 
-/* Insights row */
-.ins-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:13px}
-.ins{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:11px 12px;box-shadow:var(--sh);display:flex;gap:8px}
-.ins-ico{font-size:16px;flex-shrink:0;padding-top:1px}
+/* ── Insight tiles ── */
+.ins-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:9px;margin-bottom:14px}
+.ins{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;box-shadow:var(--sh);display:flex;gap:9px}
+.ins-ico{font-size:17px;flex-shrink:0;padding-top:1px}
 .ins-ttl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.ins-val{font-size:14px;font-weight:800;color:var(--ink);margin-top:1px;letter-spacing:-.02em}
+.ins-val{font-size:14px;font-weight:800;color:var(--ink);margin-top:1px;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ins-sub{font-size:10px;color:var(--muted);margin-top:1px}
 
-/* Range label */
-.rl{background:#e0e7ff;color:#4338ca;font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;border:1px solid #c7d2fe}
+/* ── Range label ── */
+.rl{background:var(--indigo-lt);color:var(--indigo);font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;border:1px solid #c7d2fe}
 
-/* Placeholder */
-#ph{text-align:center;padding:50px 20px}
-#ph .ph-i{font-size:42px;margin-bottom:11px}
+/* ── Placeholder ── */
+#ph{text-align:center;padding:52px 20px}
+#ph .ph-i{font-size:44px;margin-bottom:12px}
 #ph h2{font-size:15px;font-weight:700;color:var(--ink2);margin-bottom:5px}
-#ph p{font-size:13px;color:var(--muted);max-width:340px;margin:0 auto}
+#ph p{font-size:13px;color:var(--muted);max-width:360px;margin:0 auto 14px}
+#ph .warn{background:var(--amber-lt);border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;font-size:12px;color:#78350f;max-width:360px;margin:0 auto;text-align:left}
 #content{display:none}
 
+/* ── Animations ── */
 @keyframes fu{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
 .fu{animation:fu .28s ease both}
-.d1{animation-delay:.04s}.d2{animation-delay:.08s}.d3{animation-delay:.12s}
-.d4{animation-delay:.16s}.d5{animation-delay:.2s}
+.d1{animation-delay:.04s}.d2{animation-delay:.08s}.d3{animation-delay:.12s}.d4{animation-delay:.16s}.d5{animation-delay:.2s}
 </style>
 </head>
 <body>
@@ -154,40 +153,25 @@ td.nv{font-weight:600;font-variant-numeric:tabular-nums}
 <!-- HEADER -->
 <div class="hdr">
   <div class="hdr-ico">📋</div>
-  <div class="hdr-titles">
+  <div class="hdr-t">
     <h1>Invoice Analytics</h1>
-    <p>Count &amp; breakdown — time · customer · custom fields</p>
+    <p>Count &amp; breakdown — time · customer · agent · doctor · custom fields</p>
   </div>
-  <span class="badge">Read-Only 🔒</span>
-  <span id="conn-dot">⏳ Awaiting context…</span>
+  <span class="hdr-badge">v3.0</span>
+  <span class="hdr-badge">Read-Only 🔒</span>
+  <span id="conn-pill">⏳ Connecting…</span>
 </div>
 
-<div class="main">
-
-  <!-- SETUP GUIDE — only visible when opened outside Manager -->
-  <div class="setup-box" id="setup-box" style="display:none">
-    <h3>⚙️ How to install this extension inside Manager.io</h3>
-    <ol>
-      <li>Host this file on a public URL (GitHub Pages, Netlify, etc.)</li>
-      <li>Go to Manager.io → <strong>Settings → Extensions → New Extension</strong></li>
-      <li>Set <strong>Endpoint</strong> to your hosted URL</li>
-      <li>Set <strong>Placement</strong> to <code>/sales-invoices</code></li>
-      <li>Save — open Sales Invoices tab and expand the extension panel at the bottom</li>
-    </ol>
-    <p style="margin-top:9px;color:#92400e;font-size:12px">
-      ⚠ This page requires the Manager.io <code>manager-context</code> postMessage to authenticate.
-      It cannot load data when opened directly in a browser.
-    </p>
-  </div>
+<div class="wrap">
 
   <!-- CONTROL BAR -->
   <div class="ctrl">
-    <button class="btn-pri" id="btn-load" onclick="loadInvoices()" disabled>⬇ Load All Invoices</button>
-    <div class="prog-wrap"><div class="prog-bar" id="prog"></div></div>
-    <span class="status-txt" id="stxt">Waiting for Manager.io context…</span>
+    <button class="btn-load" id="btn-load" onclick="loadAllRecords()">⬇ Load All Invoices</button>
+    <div class="prog-bg"><div class="prog-fill" id="prog"></div></div>
+    <span class="stat-txt" id="stxt">Connecting to Manager.io…</span>
   </div>
 
-  <div class="err-box" id="err-box" style="display:none"></div>
+  <div class="errbox" id="errbox" style="display:none"></div>
 
   <!-- FILTER PANEL -->
   <div class="flt">
@@ -195,22 +179,22 @@ td.nv{font-weight:600;font-variant-numeric:tabular-nums}
     <div class="fg">
       <label>Period</label>
       <div class="ptabs">
-        <div class="pt on" data-p="today" onclick="setPeriod(this)">Today</div>
-        <div class="pt" data-p="week"  onclick="setPeriod(this)">This Week</div>
-        <div class="pt" data-p="month" onclick="setPeriod(this)">This Month</div>
-        <div class="pt" data-p="year"  onclick="setPeriod(this)">This Year</div>
-        <div class="pt" data-p="all"   onclick="setPeriod(this)">All Time</div>
+        <div class="pt on" data-p="today"  onclick="setPeriod(this)">Today</div>
+        <div class="pt" data-p="week"   onclick="setPeriod(this)">This Week</div>
+        <div class="pt" data-p="month"  onclick="setPeriod(this)">This Month</div>
+        <div class="pt" data-p="year"   onclick="setPeriod(this)">This Year</div>
+        <div class="pt" data-p="all"    onclick="setPeriod(this)">All Time</div>
         <div class="pt" data-p="custom" onclick="setPeriod(this)">Custom</div>
       </div>
     </div>
 
-    <!-- Custom date range (hidden until "Custom" tab is active) -->
+    <!-- Custom date range -->
     <div class="cr hide" id="cr">
       <div class="fg"><label>From</label><input type="date" id="d-from"></div>
-      <div class="fg"><label>To</label><input type="date" id="d-to"></div>
+      <div class="fg"><label>To</label>  <input type="date" id="d-to"></div>
     </div>
 
-    <!-- Static filters -->
+    <!-- Group by -->
     <div class="fg">
       <label>Group By</label>
       <select id="grp">
@@ -220,53 +204,69 @@ td.nv{font-weight:600;font-variant-numeric:tabular-nums}
       </select>
     </div>
 
-    <div class="fg">
-      <label>Customer</label>
-      <select id="f-cust"><option value="">All Customers</option></select>
-    </div>
+    <!-- Static filters row -->
+    <div class="flt-extra">
+      <span class="flt-extra-lbl">Filters:</span>
 
-    <button class="btn-pri" id="btn-apply" onclick="applyFilters()" disabled style="padding:6px 15px">Apply</button>
-    <button class="btn-sec" onclick="resetFilters()">Reset</button>
+      <div class="fg">
+        <label>Customer</label>
+        <select id="f-cust"><option value="">All Customers</option></select>
+      </div>
 
-    <!-- ── Dynamic custom-field filter dropdowns (injected after load) ── -->
-    <div class="cf-flt-row hide" id="cf-flt-row">
-      <span class="cf-flt-lbl">🔖 Custom Fields:</span>
-      <!-- .fg selects injected dynamically by buildCfFilters() -->
+      <div class="fg">
+        <label>Agent</label>
+        <select id="f-agent"><option value="">All Agents</option></select>
+      </div>
+
+      <div class="fg">
+        <label>Doctor</label>
+        <select id="f-doctor"><option value="">All Doctors</option></select>
+      </div>
+
+      <!-- Additional CF dropdowns injected here dynamically -->
+      <span id="extra-cf-anchor"></span>
+
+      <button class="btn-apply" id="btn-apply" onclick="applyFilters()" disabled>Apply Filters</button>
+      <button class="btn-reset" onclick="resetFilters()">Reset</button>
     </div>
   </div>
 
   <!-- PLACEHOLDER -->
   <div id="ph">
     <div class="ph-i">📊</div>
-    <h2>Invoice Analytics Ready</h2>
-    <p>Waiting for Manager.io to provide the connection context, then click <strong>Load All Invoices</strong>.</p>
+    <h2>Invoice Analytics</h2>
+    <p>Click <strong>Load All Invoices</strong> above to fetch data from Manager.io and unlock the full dashboard.</p>
+    <div class="warn">
+      ⚠ This extension must be running <strong>inside Manager.io</strong>.
+      It will not work when opened directly in a browser tab.
+    </div>
   </div>
 
-  <!-- MAIN CONTENT -->
+  <!-- MAIN CONTENT (revealed after load) -->
   <div id="content">
 
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;flex-wrap:wrap;gap:6px">
       <span class="rl" id="rl">All Time</span>
       <span style="font-size:11.5px;color:var(--muted)" id="rec-lbl"></span>
     </div>
 
-    <!-- KPIs -->
-    <div class="kpis">
-      <div class="kpi bl fu">   <div class="ki">📋</div><div class="kv" id="k0">—</div><div class="kl">Total (filtered)</div><div class="ks" id="k0s"></div></div>
-      <div class="kpi gr fu d1"><div class="ki">📅</div><div class="kv" id="k1">—</div><div class="kl">Today</div><div class="ks" id="k1s"></div></div>
-      <div class="kpi am fu d2"><div class="ki">📆</div><div class="kv" id="k2">—</div><div class="kl">This Week</div><div class="ks" id="k2s"></div></div>
-      <div class="kpi pu fu d3"><div class="ki">🗓️</div><div class="kv" id="k3">—</div><div class="kl">This Month</div><div class="ks" id="k3s"></div></div>
-      <div class="kpi te fu d4"><div class="ki">👥</div><div class="kv" id="k4">—</div><div class="kl">Unique Customers</div><div class="ks">in filtered range</div></div>
-      <div class="kpi in fu d5"><div class="ki">📈</div><div class="kv" id="k5">—</div><div class="kl">Avg / Active Day</div><div class="ks">in filtered range</div></div>
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi c0 fu">   <div class="ki">📋</div><div class="kv" id="k0">—</div><div class="kl">Total (filtered)</div><div class="ks" id="k0s"></div></div>
+      <div class="kpi c1 fu d1"><div class="ki">📅</div><div class="kv" id="k1">—</div><div class="kl">Today</div><div class="ks" id="k1s"></div></div>
+      <div class="kpi c2 fu d2"><div class="ki">📆</div><div class="kv" id="k2">—</div><div class="kl">This Week</div><div class="ks" id="k2s"></div></div>
+      <div class="kpi c3 fu d3"><div class="ki">🗓️</div><div class="kv" id="k3">—</div><div class="kl">This Month</div><div class="ks" id="k3s"></div></div>
+      <div class="kpi c4 fu d4"><div class="ki">👥</div><div class="kv" id="k4">—</div><div class="kl">Unique Customers</div><div class="ks">in filtered range</div></div>
+      <div class="kpi c5 fu d5"><div class="ki">📈</div><div class="kv" id="k5">—</div><div class="kl">Avg / Active Day</div><div class="ks">in filtered range</div></div>
     </div>
 
-    <!-- Insights -->
+    <!-- Insight tiles -->
     <div class="ins-row fu d2" id="ins-row"></div>
 
-    <!-- Timeline -->
+    <!-- Timeline chart -->
     <div class="sh"><div class="sh-d" style="background:var(--blue)"></div>Invoice Volume Over Time</div>
     <div class="cc fu">
-      <div class="cc-h"><h3 id="tl-h">Invoice Count by Month</h3><span class="sub" id="tl-s"></span></div>
+      <div class="cc-hd"><h3 id="tl-h">Invoice Count by Month</h3><span class="sub" id="tl-s"></span></div>
       <canvas id="tl-cv"></canvas>
     </div>
 
@@ -274,293 +274,372 @@ td.nv{font-weight:600;font-variant-numeric:tabular-nums}
     <div class="sh"><div class="sh-d" style="background:var(--green)"></div>Customer Breakdown</div>
     <div class="two fu">
       <div class="cc">
-        <div class="cc-h"><h3>Top Customers (chart)</h3></div>
+        <div class="cc-hd"><h3>Top Customers</h3></div>
         <canvas id="cust-cv"></canvas>
       </div>
       <div class="cc" style="overflow:hidden">
-        <div class="cc-h"><h3>All Customers (table)</h3><span class="sub" id="cust-s"></span></div>
-        <div class="tw">
-          <table>
-            <thead><tr><th>#</th><th>Customer</th><th class="r">Invoices</th><th class="r">Share</th><th style="width:90px">Bar</th></tr></thead>
-            <tbody id="cust-tb"></tbody>
-          </table>
-        </div>
+        <div class="cc-hd"><h3>All Customers</h3><span class="sub" id="cust-s"></span></div>
+        <div class="tw"><table>
+          <thead><tr><th>#</th><th>Customer</th><th class="r">Count</th><th class="r">Share</th><th style="width:90px">Bar</th></tr></thead>
+          <tbody id="cust-tb"></tbody>
+        </table></div>
       </div>
     </div>
 
-    <!-- Custom fields breakdown -->
-    <div class="sh" id="cf-sh" style="display:none"><div class="sh-d" style="background:var(--indigo)"></div>Custom Fields Breakdown</div>
-    <div class="cf-grid fu" id="cf-grid"></div>
+    <!-- Agent breakdown -->
+    <div class="sh"><div class="sh-d" style="background:var(--purple)"></div>Agent Breakdown</div>
+    <div class="two fu">
+      <div class="cc">
+        <div class="cc-hd"><h3>Top Agents</h3></div>
+        <canvas id="agent-cv"></canvas>
+      </div>
+      <div class="cc" style="overflow:hidden">
+        <div class="cc-hd"><h3>All Agents</h3><span class="sub" id="agent-s"></span></div>
+        <div class="tw"><table>
+          <thead><tr><th>#</th><th>Agent</th><th class="r">Count</th><th class="r">Share</th><th style="width:90px">Bar</th></tr></thead>
+          <tbody id="agent-tb"></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- Doctor breakdown -->
+    <div class="sh"><div class="sh-d" style="background:var(--teal)"></div>Doctor Breakdown</div>
+    <div class="two fu">
+      <div class="cc">
+        <div class="cc-hd"><h3>Top Doctors</h3></div>
+        <canvas id="doctor-cv"></canvas>
+      </div>
+      <div class="cc" style="overflow:hidden">
+        <div class="cc-hd"><h3>All Doctors</h3><span class="sub" id="doctor-s"></span></div>
+        <div class="tw"><table>
+          <thead><tr><th>#</th><th>Doctor</th><th class="r">Count</th><th class="r">Share</th><th style="width:90px">Bar</th></tr></thead>
+          <tbody id="doctor-tb"></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- Other Custom Fields breakdown -->
+    <div class="sh" id="cf-sh" style="display:none"><div class="sh-d" style="background:var(--indigo)"></div>Other Custom Fields Breakdown</div>
+    <div class="cf-grid" id="cf-grid"></div>
 
     <!-- Detail table -->
     <div class="sh"><div class="sh-d" style="background:var(--amber)"></div>Invoice Count by Period</div>
     <div class="cc fu">
-      <div class="cc-h"><h3 id="dt-h">Period Detail</h3><span class="sub" id="dt-s"></span></div>
-      <div class="tw">
-        <table>
-          <thead><tr><th>Period</th><th class="r">Count</th><th class="r">Cumulative</th><th style="width:130px">Trend</th></tr></thead>
-          <tbody id="dt-tb"></tbody>
-        </table>
-      </div>
+      <div class="cc-hd"><h3 id="dt-h">Period Detail</h3><span class="sub" id="dt-s"></span></div>
+      <div class="tw"><table>
+        <thead><tr><th>Period</th><th class="r">Count</th><th class="r">Cumulative</th><th style="width:130px">Trend</th></tr></thead>
+        <tbody id="dt-tb"></tbody>
+      </table></div>
     </div>
 
   </div><!-- /content -->
-</div><!-- /main -->
+</div><!-- /wrap -->
 
 <script>
-/* ═══════════════════════════════════════════════════════════
-   MANAGER.IO INVOICE ANALYTICS v2.0
-   ─────────────────────────────────────────────────────────
-   HOW THE CONNECTION WORKS:
-   Manager.io loads this page in an iframe and sends a
-   postMessage of type 'manager-context'.  The payload
-   contains:
-     • apiEndpoint   – base REST URL for this business
-     • apiAccessToken – short-lived Bearer token
-   We then use fetch() with that token to call the API.
-   ─────────────────────────────────────────────────────────
-   KEY FIXES vs v1:
-   1. Removed connect-src 'none' from CSP (blocked all fetch)
-   2. Use manager-context message instead of query proxy
-   3. Custom-field FILTER DROPDOWNS added to filter panel
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   MANAGER.IO INVOICE ANALYTICS v3.0
+   ───────────────────────────────────────────────────────────────
+   CONNECTION PROTOCOL (matches Manus working extension):
+   • Send:    window.parent.postMessage({ type:'api-request', method:'GET', path, requestId }, '*')
+   • Receive: event.data.type ends with '-response' AND event.data.requestId matches
+   • The body of the API response is in event.data.body
+   ───────────────────────────────────────────────────────────────
+   ENDPOINTS:
+   • /api4/sales-invoice-batch  – paginated, PageSize up to 1000, next_page_token
+   • /api4/customer-batch       – to resolve customer IDs → names
+   • /api4/custom-field-batch   – to resolve CF IDs → labels
+   ───────────────────────────────────────────────────────────────
+   DATA SHAPE:
+   • inv.item.issueDate        (date string)
+   • inv.item.customer         (customer key/id)
+   • inv.item.customFields2    → { strings:{}, stringArrays:{}, decimals:{}, dates:{}, booleans:{} }
+   ═══════════════════════════════════════════════════════════════ */
 
-let managerCtx   = null;   // { apiEndpoint, apiAccessToken }
-let trustedOrigin = null;
-let allInvoices  = [];
-let filtered     = [];
-let cfDefs       = [];     // [{key, label, values}] detected custom fields
-let activePeriod = 'all';
-let tlChart      = null;
-let custChart    = null;
+/* ── State ── */
+let ALL_INVOICES   = [];
+let CUSTOMERS      = {};   // id → name
+let CF_MAP         = {};   // id → label
+let MANAGER_ORIGIN = null;
+let activePeriod   = 'all';
+let tlChart = null, custChart = null, agentChart = null, doctorChart = null;
 
-/* ── Step 1: Receive manager-context ── */
-window.addEventListener('message', (e) => {
-  if (!e.data) return;
+/* ── postMessage request/response bridge ──
+   Identical to the working Manus extension protocol
+──────────────────────────────────────────── */
+function apiRequest(path) {
+  return new Promise((resolve, reject) => {
+    const requestId = crypto.randomUUID();
 
-  // Accept only the first origin that sends a valid manager-context
-  if (!trustedOrigin && e.data.type === 'manager-context') {
-    trustedOrigin = e.origin;
-  }
-  if (trustedOrigin && e.origin !== trustedOrigin) return;
+    const timer = setTimeout(() => {
+      window.removeEventListener('message', handler);
+      reject(new Error('Request timed out — is this running inside Manager.io?'));
+    }, 20000);
 
-  if (e.data.type === 'manager-context') {
-    // Payload shape varies slightly by Manager version
-    managerCtx = e.data.payload ?? e.data;
-    onCtxReady();
-  }
-});
+    function handler(event) {
+      // Origin lock: accept only Manager's origin
+      if (MANAGER_ORIGIN && event.origin !== MANAGER_ORIGIN) return;
+      if (event.source !== window.parent) return;
 
-function onCtxReady() {
-  document.getElementById('conn-dot').textContent = '✓ Connected';
-  document.getElementById('conn-dot').className = 'ok';
-  document.getElementById('btn-load').disabled = false;
-  document.getElementById('btn-apply').disabled = false;
-  document.getElementById('setup-box').style.display = 'none';
-  setStatus('Manager.io connected — click Load All Invoices');
-}
+      const d = event.data;
+      if (d && d.type && d.type.endsWith('-response') && d.requestId === requestId) {
+        clearTimeout(timer);
+        window.removeEventListener('message', handler);
+        if (!MANAGER_ORIGIN) MANAGER_ORIGIN = event.origin;
+        resolve(d.body);
+      }
+    }
 
-// If no context arrives within 5 s, show the setup guide
-setTimeout(() => {
-  if (!managerCtx) {
-    document.getElementById('conn-dot').textContent = '⚠ No context';
-    document.getElementById('conn-dot').className = 'err';
-    document.getElementById('setup-box').style.display = 'block';
-    setStatus('Not running inside Manager.io — see setup guide above');
-  }
-}, 5000);
-
-/* ── Step 2: Authenticated fetch helper ── */
-async function apiFetch(path) {
-  const base  = (managerCtx.apiEndpoint || managerCtx.apiUrl || '').replace(/\/$/, '');
-  const token = managerCtx.apiAccessToken || managerCtx.accessToken || managerCtx.token || '';
-  if (!base)  throw new Error('apiEndpoint is missing from Manager context.');
-  if (!token) throw new Error('apiAccessToken is missing from Manager context.');
-
-  const url = path.startsWith('http') ? path : base + path;
-  const r = await fetch(url, {
-    headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: 'api-request', method: 'GET', path, requestId }, '*');
   });
-  if (!r.ok) throw new Error(`API ${r.status} — ${url}`);
-  return r.json();
 }
 
-/* ── Step 3: Load all invoices (paginated) ── */
-async function loadInvoices() {
-  if (!managerCtx) { showErr('Manager.io context not received yet.'); return; }
+/* ── Paginated fetch helper ── */
+async function fetchAll(endpoint, onProgress) {
+  const items = [];
+  let nextToken = null;
+  let page = 0;
+  let apiTotal = null;
 
+  do {
+    page++;
+    const path = nextToken
+      ? `${endpoint}?PageSize=1000&next_page_token=${encodeURIComponent(nextToken)}`
+      : `${endpoint}?PageSize=1000`;
+
+    const data = await apiRequest(path);
+    const rows = Array.isArray(data) ? data : (data.items || []);
+    items.push(...rows);
+
+    nextToken = data.next_page_token || data.nextPageToken || null;
+    if (apiTotal === null) apiTotal = data.totalCount ?? data.total ?? null;
+    if (onProgress) onProgress(items.length, apiTotal, page);
+  } while (nextToken && page < 200);
+
+  return items;
+}
+
+/* ── Check connection on startup ── */
+async function checkConnection() {
+  if (window.parent === window) {
+    setConn('err', '⚠ Not inside Manager');
+    setStatus('Open this extension inside Manager.io');
+    return;
+  }
+  try {
+    setStatus('Testing connection…');
+    await apiRequest('/api4/sales-invoice-batch?PageSize=1');
+    setConn('ok', '✓ Connected');
+    setStatus('Connected — click Load All Invoices');
+    document.getElementById('btn-load').disabled = false;
+  } catch (e) {
+    setConn('err', '⚠ No response');
+    setStatus('Could not connect. Ensure extension is installed correctly in Manager.io');
+  }
+}
+
+/* ── Main loader ── */
+async function loadAllRecords() {
   document.getElementById('btn-load').disabled = true;
-  document.getElementById('err-box').style.display = 'none';
-  allInvoices = [];
-  prog(5); setStatus('Probing API endpoint…');
+  document.getElementById('errbox').style.display = 'none';
+  ALL_INVOICES = [];
+  setBar(3);
 
   try {
-    // Manager.io endpoint discovery — try in order
-    const PATHS = [
-      '/sales-invoices',
-      '/api4/batch-sales-invoice',
-      '/api/batch-sales-invoice',
-    ];
+    /* 1. Load Customers */
+    setStatus('Loading customers…');
+    const custs = await fetchAll('/api4/customer-batch');
+    CUSTOMERS = {};
+    custs.forEach(c => {
+      const id   = c.key || c.id;
+      const name = c.item?.name || c.name || c.item?.text || c.text || 'Unknown';
+      if (id) CUSTOMERS[id] = name;
+    });
+    setBar(15);
 
-    let foundPath = null;
-    for (const p of PATHS) {
-      try {
-        const probe = await apiFetch(p);
-        // Valid response has a data array or is itself an array
-        if (probe && (Array.isArray(probe) || Array.isArray(probe.data))) {
-          foundPath = p; break;
-        }
-      } catch (_) { /* try next */ }
-    }
-    if (!foundPath) throw new Error(
-      'Could not reach sales invoice endpoint. Tried: ' + PATHS.join(', ') +
-      '. Ensure this extension is placed at /sales-invoices in Manager.'
-    );
+    /* 2. Load Custom Field definitions */
+    setStatus('Loading custom field definitions…');
+    const cfs = await fetchAll('/api4/custom-field-batch');
+    CF_MAP = {};
+    cfs.forEach(cf => {
+      const id    = cf.key || cf.id;
+      const label = cf.item?.label || cf.label || cf.item?.name || cf.name || 'Unknown';
+      if (id) CF_MAP[id] = label;
+    });
+    setBar(25);
 
-    // Paginated fetch
-    let pageToken = null, page = 0;
-    while (true) {
-      page++;
-      let path = foundPath + (pageToken ? '?pageToken=' + encodeURIComponent(pageToken) : '');
-      prog(Math.min(8 + page * 9, 85));
-      setStatus(`Fetching page ${page}…`);
+    /* 3. Load Invoices (paginated) */
+    ALL_INVOICES = await fetchAll('/api4/sales-invoice-batch', (loaded, total) => {
+      setBar(total ? 25 + Math.round((loaded / total) * 65) : Math.min(25 + loaded * 0.05, 88));
+      setStatus(total
+        ? `Loading invoices: ${loaded.toLocaleString()} / ${total.toLocaleString()}`
+        : `Loading invoices: ${loaded.toLocaleString()} fetched…`);
+    });
 
-      const resp = await apiFetch(path);
-      const rows = Array.isArray(resp) ? resp : (resp.data ?? []);
-      allInvoices = allInvoices.concat(rows);
+    setBar(100);
+    setStatus(`✓ ${ALL_INVOICES.length.toLocaleString()} invoices loaded`);
+    document.getElementById('btn-load').textContent = '↻ Reload';
 
-      pageToken = resp.nextPageToken || resp.next_page_token || null;
-      if (!pageToken || rows.length === 0) break;
-    }
+    /* Populate dropdowns */
+    populateFilters();
 
-    prog(100);
-    setStatus(`✓ ${allInvoices.length} invoices loaded`);
-
-    // Populate static filters
-    buildCustFilter();
-
-    // Detect custom fields → build CF filter dropdowns + breakdown
-    cfDefs = detectCFs(allInvoices);
-    buildCfFilters();
-
-    // Show dashboard
+    /* Show dashboard */
     document.getElementById('ph').style.display = 'none';
     document.getElementById('content').style.display = 'block';
+    document.getElementById('btn-apply').disabled = false;
 
-    // Default: All Time, Month grouping
     activePeriod = 'all';
     setTab('all');
     applyFilters();
 
   } catch (err) {
     showErr(err.message);
-    prog(0); setStatus('Error — see above');
+    setBar(0);
+    setStatus('Error — see above');
   }
 
   document.getElementById('btn-load').disabled = false;
-  document.getElementById('btn-load').textContent = '↻ Reload';
 }
 
-/* ── Customer filter dropdown ── */
-function getCustomer(inv) {
-  return inv.customer || inv.Customer || inv.CustomerName || inv.customerName || '';
-}
-function getDate(inv) {
-  return inv.date || inv.Date || inv.issueDate || inv.IssueDate || '';
+/* ── Custom field value resolver ── */
+function getCFValue(inv, labelFragment) {
+  const item = inv.item || inv;
+  const cf2  = item.customFields2;
+  if (!cf2) return null;
+
+  const cats = ['strings','stringArrays','decimals','dates','booleans'];
+  for (const cat of cats) {
+    const bucket = cf2[cat];
+    if (!bucket || typeof bucket !== 'object') continue;
+    for (const id in bucket) {
+      const label = CF_MAP[id] || '';
+      if (label.toLowerCase().includes(labelFragment.toLowerCase())) {
+        const val = bucket[id];
+        if (val === null || val === undefined) continue;
+        if (Array.isArray(val)) return val.join(', ') || null;
+        const sv = String(val).trim();
+        return sv || null;
+      }
+    }
+  }
+  return null;
 }
 
-function buildCustFilter() {
-  const sel = document.getElementById('f-cust');
-  const list = [...new Set(allInvoices.map(getCustomer).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">All Customers</option>';
-  list.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+/* Get ALL custom field values for an invoice as { label: value } */
+function getAllCFValues(inv) {
+  const item = inv.item || inv;
+  const cf2  = item.customFields2;
+  const result = {};
+  if (!cf2) return result;
+
+  const cats = ['strings','stringArrays','decimals','dates','booleans'];
+  for (const cat of cats) {
+    const bucket = cf2[cat];
+    if (!bucket || typeof bucket !== 'object') continue;
+    for (const id in bucket) {
+      const label = CF_MAP[id];
+      if (!label) continue;
+      // Skip agent/doctor — handled separately
+      const ll = label.toLowerCase();
+      if (ll.includes('agent') || ll.includes('doctor')) continue;
+      const val = bucket[id];
+      if (val === null || val === undefined) continue;
+      const sv = Array.isArray(val) ? val.join(', ') : String(val).trim();
+      if (sv) result[label] = sv;
+    }
+  }
+  return result;
 }
 
-/* ── Custom field detection ── */
-const SKIP_KEYS = new Set([
-  'date','Date','issueDate','IssueDate','dueDate','DueDate',
-  'customer','Customer','CustomerName','customerName',
-  'reference','Reference','number','Number','invoiceNumber','InvoiceNumber',
-  'currency','Currency','exchangeRate','ExchangeRate',
-  'total','Total','amount','Amount','subtotal','Subtotal',
-  'tax','Tax','status','Status','paid','Paid','locked','Locked',
-  'description','Description','lines','Lines','items','Items',
-  'key','Key','uuid','Uuid','id','Id','type','Type',
-  'supplier','Supplier','billingAddress','BillingAddress','notes','Notes',
-  'paymentTerms','PaymentTerms','contactPerson','ContactPerson',
-  'createdDate','CreatedDate','modifiedDate','ModifiedDate',
-  'void','Void','draft','Draft','discount','Discount','shipping','Shipping',
-  'baseAmount','BaseAmount','baseCurrency','BaseCurrency',
-  'purchaseOrderNumber','PurchaseOrderNumber','division','Division',
-  'nextPageToken','next_page_token',
-]);
+/* ── Populate filter dropdowns ── */
+function populateFilters() {
+  const custSet   = new Set();
+  const agentSet  = new Set();
+  const doctorSet = new Set();
 
-function detectCFs(invoices) {
-  const map = {};
-  invoices.forEach(inv => {
-    Object.keys(inv).forEach(k => {
-      if (SKIP_KEYS.has(k) || k.startsWith('_') || k.startsWith('$')) return;
-      const val = inv[k];
-      if (val == null || typeof val === 'object') return;
-      const sv = String(val).trim();
-      if (!sv) return;
-      if (!map[k]) map[k] = {};
-      map[k][sv] = (map[k][sv] || 0) + 1;
-    });
+  // Track all OTHER custom field values: { label: Set of values }
+  const extraCF = {};
+
+  ALL_INVOICES.forEach(inv => {
+    const item = inv.item || inv;
+
+    // Customer
+    const custId   = item.customer;
+    const custName = CUSTOMERS[custId] || custId || '';
+    if (custName) custSet.add(custName);
+
+    // Agent & Doctor
+    const agent  = getCFValue(inv, 'agent');
+    const doctor = getCFValue(inv, 'doctor');
+    if (agent)  agentSet.add(agent);
+    if (doctor) doctorSet.add(doctor);
+
+    // Other CFs
+    const allCF = getAllCFValues(inv);
+    for (const [lbl, val] of Object.entries(allCF)) {
+      if (!extraCF[lbl]) extraCF[lbl] = new Set();
+      extraCF[lbl].add(val);
+    }
   });
-  return Object.entries(map)
-    .filter(([, v]) => { const u = Object.keys(v).length; return u >= 2 && u <= 80; })
-    .map(([k, v]) => ({
-      key: k,
-      label: camelLabel(k),
-      values: Object.entries(v).sort((a, b) => b[1] - a[1])
-    }));
+
+  fillSel('f-cust',   [...custSet].sort());
+  fillSel('f-agent',  [...agentSet].sort());
+  fillSel('f-doctor', [...doctorSet].sort());
+
+  // Build extra CF dropdowns (only if 2–60 unique values, skip giant ID-like fields)
+  buildExtraCFDropdowns(extraCF);
 }
 
-/* ── Build CF filter dropdowns inside filter panel ── */
-function buildCfFilters() {
-  const row = document.getElementById('cf-flt-row');
-  // Remove previously injected dropdowns
-  row.querySelectorAll('.cf-dyn').forEach(el => el.remove());
+function fillSel(id, values) {
+  const sel = document.getElementById(id);
+  const first = sel.options[0].outerHTML;
+  sel.innerHTML = first + values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+}
 
-  if (!cfDefs.length) { row.classList.add('hide'); return; }
-  row.classList.remove('hide');
+function buildExtraCFDropdowns(extraCF) {
+  const anchor = document.getElementById('extra-cf-anchor');
+  anchor.innerHTML = '';
 
-  cfDefs.forEach(cf => {
-    const fg = document.createElement('div');
-    fg.className = 'fg cf-dyn';
+  for (const [label, valSet] of Object.entries(extraCF)) {
+    const uniqueCount = valSet.size;
+    if (uniqueCount < 2 || uniqueCount > 60) continue;
+
+    const fg  = document.createElement('div');
+    fg.className = 'fg cf-extra-fg';
+    fg.dataset.cflabel = label;
 
     const lbl = document.createElement('label');
-    lbl.textContent = cf.label;
+    lbl.textContent = label;
 
     const sel = document.createElement('select');
-    sel.dataset.cfkey = cf.key;
-    sel.className = 'cf-filter-sel';
-    sel.innerHTML = `<option value="">All</option>` +
-      cf.values.map(([v]) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    sel.className = 'cf-extra-sel';
+    sel.dataset.cflabel = label;
+    sel.innerHTML = `<option value="">All ${esc(label)}s</option>` +
+      [...valSet].sort().map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
 
     fg.appendChild(lbl);
     fg.appendChild(sel);
-    row.appendChild(fg);
-  });
+    anchor.appendChild(fg);
+  }
 }
 
 /* ── Period helpers ── */
-const today = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => new Date().toISOString().slice(0, 10);
+function pad2(n) { return String(n).padStart(2, '0'); }
 
 function getRange(p) {
-  const now = new Date(), t = today();
+  const now = new Date(), t = todayStr();
   if (p === 'today') return { from: t, to: t };
-  if (p === 'week')  {
+  if (p === 'week') {
     const d = new Date(now), day = d.getDay();
     d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
-    return { from: d.toISOString().slice(0, 10), to: t };
+    return { from: d.toISOString().slice(0,10), to: t };
   }
-  if (p === 'month') return { from:`${now.getFullYear()}-${pad(now.getMonth()+1)}-01`, to: t };
+  if (p === 'month') return { from:`${now.getFullYear()}-${pad2(now.getMonth()+1)}-01`, to: t };
   if (p === 'year')  return { from:`${now.getFullYear()}-01-01`, to: t };
   if (p === 'custom') return {
     from: document.getElementById('d-from').value || '2000-01-01',
-    to:   document.getElementById('d-to').value   || '9999-12-31',
+    to:   document.getElementById('d-to').value   || '9999-12-31'
   };
   return { from:'2000-01-01', to:'9999-12-31' };
 }
@@ -579,156 +658,205 @@ function setTab(p) {
 function resetFilters() {
   activePeriod = 'all';
   setTab('all');
-  document.getElementById('f-cust').value = '';
+  document.getElementById('f-cust').value   = '';
+  document.getElementById('f-agent').value  = '';
+  document.getElementById('f-doctor').value = '';
   document.getElementById('grp').value = 'month';
-  document.querySelectorAll('.cf-filter-sel').forEach(s => s.value = '');
-  if (allInvoices.length) applyFilters();
+  document.querySelectorAll('.cf-extra-sel').forEach(s => s.value = '');
+  if (ALL_INVOICES.length) applyFilters();
 }
 
 /* ── APPLY FILTERS ── */
 function applyFilters() {
   const { from, to } = getRange(activePeriod);
-  const custF  = document.getElementById('f-cust').value;
-  const grpBy  = document.getElementById('grp').value;
+  const fCust   = document.getElementById('f-cust').value;
+  const fAgent  = document.getElementById('f-agent').value;
+  const fDoctor = document.getElementById('f-doctor').value;
+  const grpBy   = document.getElementById('grp').value;
 
-  // Collect active custom-field filters
-  const cfActive = {};
-  document.querySelectorAll('.cf-filter-sel').forEach(s => {
-    if (s.value) cfActive[s.dataset.cfkey] = s.value;
+  // Collect extra CF filter values
+  const extraFilters = {};
+  document.querySelectorAll('.cf-extra-sel').forEach(s => {
+    if (s.value) extraFilters[s.dataset.cflabel] = s.value;
   });
 
-  filtered = allInvoices.filter(inv => {
-    const d = getDate(inv);
+  const filtered = ALL_INVOICES.filter(inv => {
+    const item = inv.item || inv;
+    const d = item.issueDate || item.date || '';
     if (!d || d < from || d > to) return false;
-    if (custF && getCustomer(inv) !== custF) return false;
-    for (const [k, v] of Object.entries(cfActive)) {
-      if (String(inv[k] ?? '').trim() !== v) return false;
+
+    // Customer filter
+    if (fCust) {
+      const custId   = item.customer;
+      const custName = CUSTOMERS[custId] || custId || '';
+      if (custName !== fCust) return false;
     }
+
+    // Agent filter
+    if (fAgent) {
+      const agent = getCFValue(inv, 'agent') || '';
+      if (agent !== fAgent) return false;
+    }
+
+    // Doctor filter
+    if (fDoctor) {
+      const doctor = getCFValue(inv, 'doctor') || '';
+      if (doctor !== fDoctor) return false;
+    }
+
+    // Extra CF filters
+    for (const [label, val] of Object.entries(extraFilters)) {
+      const cfVal = getAllCFValues(inv)[label] || '';
+      if (cfVal !== val) return false;
+    }
+
     return true;
   });
 
-  renderRangeLabel(from, to);
-  renderKPIs();
-  renderInsights(grpBy);
-  renderTimeline(grpBy);
-  renderCustomers();
-  renderCfBreakdown();
-  renderDetail(grpBy);
-
-  document.getElementById('rec-lbl').textContent =
-    `${filtered.length} invoice${filtered.length !== 1 ? 's' : ''} in range`;
+  renderAll(filtered, from, to, grpBy);
 }
 
-/* ── RENDER: Range label ── */
-function renderRangeLabel(from, to) {
+/* ── RENDER EVERYTHING ── */
+function renderAll(filtered, from, to, grpBy) {
   const names = { today:'Today', week:'This Week', month:'This Month', year:'This Year', all:'All Time', custom:'Custom Range' };
-  let t = names[activePeriod] || 'Custom Range';
-  if (activePeriod === 'custom') t += ` · ${from} → ${to}`;
-  document.getElementById('rl').textContent = t;
+  let rlTxt = names[activePeriod] || 'Custom';
+  if (activePeriod === 'custom') rlTxt += ` · ${from} → ${to}`;
+  document.getElementById('rl').textContent = rlTxt;
+  document.getElementById('rec-lbl').textContent = `${filtered.length.toLocaleString()} invoice${filtered.length!==1?'s':''} in range`;
+
+  renderKPIs(filtered);
+  renderInsights(filtered, grpBy);
+  renderTimeline(filtered, grpBy);
+
+  // Build breakdown maps
+  const custMap   = {};
+  const agentMap  = {};
+  const doctorMap = {};
+  const otherCFs  = {}; // label → { value → count }
+
+  filtered.forEach(inv => {
+    const item = inv.item || inv;
+
+    // Customer
+    const custId   = item.customer;
+    const custName = CUSTOMERS[custId] || custId || '(Unknown)';
+    custMap[custName] = (custMap[custName] || 0) + 1;
+
+    // Agent
+    const agent = getCFValue(inv, 'agent') || '(None)';
+    agentMap[agent] = (agentMap[agent] || 0) + 1;
+
+    // Doctor
+    const doctor = getCFValue(inv, 'doctor') || '(None)';
+    doctorMap[doctor] = (doctorMap[doctor] || 0) + 1;
+
+    // Other CFs
+    const all = getAllCFValues(inv);
+    for (const [lbl, val] of Object.entries(all)) {
+      if (!otherCFs[lbl]) otherCFs[lbl] = {};
+      otherCFs[lbl][val] = (otherCFs[lbl][val] || 0) + 1;
+    }
+  });
+
+  renderBreakdown('cust',   custMap,   'cust-cv',   'cust-tb',   'cust-s');
+  renderBreakdown('agent',  agentMap,  'agent-cv',  'agent-tb',  'agent-s');
+  renderBreakdown('doctor', doctorMap, 'doctor-cv', 'doctor-tb', 'doctor-s');
+  renderOtherCFs(otherCFs);
+  renderDetail(filtered, grpBy);
 }
 
-/* ── RENDER: KPIs ── */
-function renderKPIs() {
-  const t = today(), now = new Date();
+/* ── KPIs ── */
+function renderKPIs(filtered) {
+  const t = todayStr(), now = new Date();
   const wd = new Date(now); const day = wd.getDay();
-  wd.setDate(wd.getDate() + (day === 0 ? -6 : 1 - day));
-  const wf = wd.toISOString().slice(0, 10);
-  const mf = `${now.getFullYear()}-${pad(now.getMonth()+1)}-01`;
+  wd.setDate(wd.getDate() + (day===0?-6:1-day));
+  const wf = wd.toISOString().slice(0,10);
+  const mf = `${now.getFullYear()}-${pad2(now.getMonth()+1)}-01`;
 
-  const todayCnt = allInvoices.filter(i => getDate(i) === t).length;
-  const weekCnt  = allInvoices.filter(i => { const d=getDate(i); return d>=wf && d<=t; }).length;
-  const monCnt   = allInvoices.filter(i => { const d=getDate(i); return d>=mf && d<=t; }).length;
-  const custSet  = new Set(filtered.map(getCustomer).filter(Boolean));
-  const days     = new Set(filtered.map(getDate).filter(Boolean)).size;
-  const avg      = days ? (filtered.length / days).toFixed(1) : '0';
+  const todayCnt = ALL_INVOICES.filter(i => invDate(i) === t).length;
+  const weekCnt  = ALL_INVOICES.filter(i => { const d=invDate(i); return d>=wf && d<=t; }).length;
+  const monCnt   = ALL_INVOICES.filter(i => { const d=invDate(i); return d>=mf && d<=t; }).length;
+  const custSet  = new Set(filtered.map(i => CUSTOMERS[(i.item||i).customer] || (i.item||i).customer).filter(Boolean));
+  const days     = new Set(filtered.map(invDate).filter(Boolean)).size;
+  const avg      = days ? (filtered.length/days).toFixed(1) : '0';
 
-  txt('k0', filtered.length);  txt('k0s', `of ${allInvoices.length} total`);
-  txt('k1', todayCnt);          txt('k1s', t);
-  txt('k2', weekCnt);           txt('k2s', `from ${wf}`);
-  txt('k3', monCnt);            txt('k3s', `from ${mf}`);
+  txt('k0', filtered.length); txt('k0s', `of ${ALL_INVOICES.length.toLocaleString()} total`);
+  txt('k1', todayCnt);        txt('k1s', t);
+  txt('k2', weekCnt);         txt('k2s', `from ${wf}`);
+  txt('k3', monCnt);          txt('k3s', `from ${mf}`);
   txt('k4', custSet.size);
   txt('k5', avg);
 }
 
-/* ── RENDER: Insight tiles ── */
-function renderInsights(grpBy) {
+/* ── Insight tiles ── */
+function renderInsights(filtered, grpBy) {
   const g = groupData(filtered, grpBy);
   const entries = Object.entries(g).sort((a,b)=>a[0].localeCompare(b[0]));
   if (!entries.length) { document.getElementById('ins-row').innerHTML=''; return; }
-
   const counts = entries.map(e=>e[1]);
-  const maxC = Math.max(...counts), minC = Math.min(...counts);
-  const best  = entries.find(e=>e[1]===maxC);
-  const worst = entries.find(e=>e[1]===minC);
-
+  const best  = entries.find(e=>e[1]===Math.max(...counts));
+  const worst = entries.find(e=>e[1]===Math.min(...counts));
   const custMap = {};
-  filtered.forEach(i => { const c=getCustomer(i); if(c) custMap[c]=(custMap[c]||0)+1; });
+  filtered.forEach(i => { const c=CUSTOMERS[(i.item||i).customer]||'?'; custMap[c]=(custMap[c]||0)+1; });
   const topCust = Object.entries(custMap).sort((a,b)=>b[1]-a[1])[0];
-  const activeDays = new Set(filtered.map(getDate).filter(Boolean)).size;
 
   const tiles = [
-    { ico:'🏆', title:'Best Period',       val: fmtLabel(best[0],grpBy),  sub:`${best[1]} invoices` },
-    { ico:'📉', title:'Quietest Period',   val: fmtLabel(worst[0],grpBy), sub:`${worst[1]} invoices` },
-    { ico:'📅', title:'Active Days',       val: activeDays,               sub:'days with invoices' },
+    { ico:'🏆', title:'Best Period',     val: fmtLabel(best[0],grpBy),  sub:`${best[1]} invoices` },
+    { ico:'📉', title:'Quietest Period', val: fmtLabel(worst[0],grpBy), sub:`${worst[1]} invoices` },
+    { ico:'📅', title:'Active Days',     val: new Set(filtered.map(invDate).filter(Boolean)).size, sub:'days with invoices' },
     topCust ? { ico:'⭐', title:'Top Customer', val: topCust[0], sub:`${topCust[1]} invoices` } : null,
   ].filter(Boolean);
 
   document.getElementById('ins-row').innerHTML = tiles.map(t =>
     `<div class="ins"><div class="ins-ico">${t.ico}</div>
     <div><div class="ins-ttl">${t.title}</div>
-    <div class="ins-val">${esc(String(t.val))}</div>
+    <div class="ins-val" title="${esc(String(t.val))}">${esc(String(t.val))}</div>
     <div class="ins-sub">${t.sub}</div></div></div>`
   ).join('');
 }
 
-/* ── RENDER: Timeline chart ── */
-const PAL = ['#2563eb','#16a34a','#d97706','#7c3aed','#0d9488','#dc2626','#4338ca','#0891b2','#84cc16','#f59e0b','#ef4444','#8b5cf6'];
-
-function renderTimeline(grpBy) {
+/* ── Timeline chart ── */
+function renderTimeline(filtered, grpBy) {
   const g = groupData(filtered, grpBy);
   const keys = Object.keys(g).sort();
-  const vals = keys.map(k => g[k]);
+  const vals = keys.map(k=>g[k]);
   const max  = Math.max(...vals, 1);
-
   txt('tl-h', `Invoice Count by ${cap(grpBy)}`);
-  txt('tl-s', `${filtered.length} invoices · ${keys.length} ${grpBy}s`);
-
+  txt('tl-s', `${filtered.length.toLocaleString()} invoices · ${keys.length} ${grpBy}s`);
   const cv = document.getElementById('tl-cv');
   if (tlChart) tlChart.destroy();
   tlChart = new Chart(cv, {
-    type: 'bar',
-    data: {
-      labels: keys.map(k => fmtLabel(k, grpBy)),
-      datasets: [{
-        label:'Invoices',
-        data: vals,
-        backgroundColor: vals.map(v => v/max>=.7?'#2563eb':v/max>=.4?'#3b82f6':'#93c5fd'),
-        borderRadius: 5, borderSkipped: false
-      }]
+    type:'bar',
+    data:{
+      labels: keys.map(k=>fmtLabel(k,grpBy)),
+      datasets:[{ label:'Invoices', data:vals,
+        backgroundColor: vals.map(v => v/max>=.7?'#1d6fcf':v/max>=.4?'#4a8fd4':'#93c5fd'),
+        borderRadius:5, borderSkipped:false }]
     },
-    options: {
-      responsive:true,
-      plugins:{ legend:{display:false} },
+    options:{
+      responsive:true, plugins:{legend:{display:false}},
       scales:{
-        x:{ grid:{display:false}, ticks:{font:{size:11},maxRotation:45} },
-        y:{ beginAtZero:true, ticks:{stepSize:1,callback:v=>Number.isInteger(v)?v:''}, grid:{color:'#f1f5f9'} }
+        x:{grid:{display:false},ticks:{font:{size:11},maxRotation:45}},
+        y:{beginAtZero:true,ticks:{stepSize:1,callback:v=>Number.isInteger(v)?v:''},grid:{color:'#f1f5f9'}}
       }
     }
   });
 }
 
-/* ── RENDER: Customer breakdown ── */
-function renderCustomers() {
-  const map = {};
-  filtered.forEach(i => { const c=getCustomer(i)||'(No Customer)'; map[c]=(map[c]||0)+1; });
-  const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]);
-  const total  = filtered.length || 1;
+/* ── Generic breakdown: chart + table ── */
+const PAL = ['#1d6fcf','#16a34a','#d97706','#7c3aed','#0d9488','#dc2626','#4338ca','#0891b2','#84cc16','#f59e0b','#ef4444','#8b5cf6'];
+const chartReg = {};
 
-  // Horizontal bar chart (top 12)
-  const top12 = sorted.slice(0,12);
-  const cv = document.getElementById('cust-cv');
-  if (custChart) custChart.destroy();
-  custChart = new Chart(cv, {
+function renderBreakdown(key, map, cvId, tbId, subId) {
+  const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  const total  = Object.values(map).reduce((a,b)=>a+b,0) || 1;
+  const top12  = sorted.slice(0,12);
+
+  txt(subId, `${sorted.length} ${key}s`);
+
+  const cv = document.getElementById(cvId);
+  if (chartReg[key]) chartReg[key].destroy();
+  chartReg[key] = new Chart(cv, {
     type:'bar',
     data:{
       labels: top12.map(([n])=>n.length>22?n.slice(0,20)+'…':n),
@@ -738,18 +866,17 @@ function renderCustomers() {
       indexAxis:'y', responsive:true,
       plugins:{legend:{display:false}},
       scales:{
-        x:{ beginAtZero:true, ticks:{stepSize:1,callback:v=>Number.isInteger(v)?v:''}, grid:{color:'#f1f5f9'} },
-        y:{ grid:{display:false}, ticks:{font:{size:11}} }
+        x:{beginAtZero:true,ticks:{stepSize:1,callback:v=>Number.isInteger(v)?v:''},grid:{color:'#f1f5f9'}},
+        y:{grid:{display:false},ticks:{font:{size:11}}}
       }
     }
   });
 
-  txt('cust-s', `${sorted.length} customers`);
   const maxV = sorted[0]?.[1] || 1;
-  document.getElementById('cust-tb').innerHTML = sorted.slice(0,25).map(([name,cnt],i) => {
+  document.getElementById(tbId).innerHTML = sorted.slice(0,25).map(([name,cnt],i)=>{
     const pct = ((cnt/total)*100).toFixed(1);
     const col = PAL[i%PAL.length];
-    const bw  = Math.round((cnt/maxV)*100);
+    const bw  = Math.round(cnt/maxV*100);
     return `<tr>
       <td style="color:var(--faint);font-size:11px">${i+1}</td>
       <td class="nm">${esc(name)}</td>
@@ -762,21 +889,25 @@ function renderCustomers() {
   }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No data</td></tr>';
 }
 
-/* ── RENDER: Custom fields breakdown (cards) ── */
-function renderCfBreakdown() {
-  const cfs = detectCFs(filtered);
+/* ── Other CF breakdown cards ── */
+const CFPAL = ['#1d6fcf','#16a34a','#d97706','#7c3aed','#0d9488','#4338ca'];
+function renderOtherCFs(otherCFs) {
+  const fields = Object.entries(otherCFs)
+    .filter(([,vmap]) => { const u=Object.keys(vmap).length; return u>=2 && u<=60; })
+    .sort((a,b)=>a[0].localeCompare(b[0]));
+
   const grid = document.getElementById('cf-grid');
   const sh   = document.getElementById('cf-sh');
-  if (!cfs.length) { sh.style.display='none'; grid.innerHTML=''; return; }
-  sh.style.display='flex';
+  if (!fields.length) { sh.style.display='none'; grid.innerHTML=''; return; }
+  sh.style.display = 'flex';
 
-  const cols = ['#2563eb','#16a34a','#d97706','#7c3aed','#0d9488','#4338ca','#dc2626','#0891b2'];
-  grid.innerHTML = cfs.map((cf, ci) => {
-    const col = cols[ci%cols.length];
-    const top = cf.values.slice(0,10);
-    const max = top[0]?.[1] || 1;
+  grid.innerHTML = fields.map(([label, vmap], ci) => {
+    const col  = CFPAL[ci%CFPAL.length];
+    const vals = Object.entries(vmap).sort((a,b)=>b[1]-a[1]);
+    const top  = vals.slice(0,10);
+    const max  = top[0]?.[1] || 1;
     return `<div class="cfc">
-      <h4>${esc(cf.label)}<em>${cf.values.length} values</em></h4>
+      <h4>${esc(label)}<em>${vals.length} values</em></h4>
       ${top.map(([v,cnt])=>`<div class="cfr">
         <div class="cfr-n" title="${esc(v)}">${esc(v)}</div>
         <div class="cfr-bg"><div class="cfr-bar" style="width:${Math.round(cnt/max*100)}%;background:${col}"></div></div>
@@ -786,15 +917,15 @@ function renderCfBreakdown() {
   }).join('');
 }
 
-/* ── RENDER: Period detail table ── */
-function renderDetail(grpBy) {
+/* ── Period detail table ── */
+function renderDetail(filtered, grpBy) {
   const g = groupData(filtered, grpBy);
   const entries = Object.entries(g).sort((a,b)=>a[0].localeCompare(b[0]));
   const max = Math.max(...entries.map(e=>e[1]),1);
   let cum = 0;
-  txt('dt-h', `Invoice Count — by ${cap(grpBy)}`);
+  txt('dt-h', `Invoice Count — grouped by ${cap(grpBy)}`);
   txt('dt-s', `${entries.length} ${grpBy}s`);
-  document.getElementById('dt-tb').innerHTML = entries.map(([k,cnt]) => {
+  document.getElementById('dt-tb').innerHTML = entries.map(([k,cnt])=>{
     cum += cnt;
     const bw = Math.round(cnt/max*100);
     return `<tr>
@@ -808,55 +939,54 @@ function renderDetail(grpBy) {
   }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:12px">No invoices in this range</td></tr>';
 }
 
-/* ── Grouping utilities ── */
+/* ── Grouping ── */
 function groupData(invoices, grpBy) {
   const map = {};
   invoices.forEach(inv => {
-    const k = periodKey(getDate(inv), grpBy);
+    const k = periodKey(invDate(inv), grpBy);
     map[k] = (map[k]||0)+1;
   });
   return map;
+}
+function invDate(inv) {
+  const item = inv.item || inv;
+  return item.issueDate || item.date || '';
 }
 function periodKey(dateStr, g) {
   if (!dateStr) return 'Unknown';
   const d = new Date(dateStr + 'T00:00:00');
   if (isNaN(d)) return 'Unknown';
-  if (g === 'day') return dateStr;
-  if (g === 'week') {
-    const t = new Date(d), day = t.getDay();
-    t.setDate(t.getDate() + (day===0?-6:1-day));
-    return 'Wk-' + t.toISOString().slice(0,10);
+  if (g==='day')   return dateStr;
+  if (g==='week') {
+    const t=new Date(d), day=t.getDay();
+    t.setDate(t.getDate()+(day===0?-6:1-day));
+    return 'Wk-'+t.toISOString().slice(0,10);
   }
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
 }
 function fmtLabel(k, g) {
-  if (g==='day') {
-    const d = new Date(k+'T00:00:00');
-    return isNaN(d) ? k : d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-  }
+  if (g==='day') { const d=new Date(k+'T00:00:00'); return isNaN(d)?k:d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
   if (g==='week') return k;
-  const [y,m] = k.split('-');
+  const [y,m]=k.split('-');
   return new Date(+y,+m-1,1).toLocaleDateString(undefined,{month:'long',year:'numeric'});
 }
-function camelLabel(k) {
-  return k.replace(/([A-Z])/g,' $1').replace(/[_-]+/g,' ').replace(/^\s/,'').replace(/\b\w/g,c=>c.toUpperCase()).trim();
-}
 
-/* ── Tiny helpers ── */
-function cap(s)   { return s.charAt(0).toUpperCase()+s.slice(1); }
-function pad(n)   { return String(n).padStart(2,'0'); }
-function txt(id,v){ const e=document.getElementById(id); if(e) e.textContent=v; }
-function esc(s)   { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function prog(p)  { document.getElementById('prog').style.width=p+'%'; }
+/* ── Tiny utils ── */
+function cap(s)     { return s.charAt(0).toUpperCase()+s.slice(1); }
+function txt(id, v) { const e=document.getElementById(id); if(e) e.textContent=v; }
+function esc(s)     { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function setBar(p)  { document.getElementById('prog').style.width=p+'%'; }
 function setStatus(t){ document.getElementById('stxt').textContent=t; }
-function showErr(m){ const e=document.getElementById('err-box'); e.textContent='⚠ '+m; e.style.display='block'; }
+function setConn(cls,t){ const el=document.getElementById('conn-pill'); el.className=cls; el.textContent=t; }
+function showErr(m) { const e=document.getElementById('errbox'); e.textContent='⚠ '+m; e.style.display='block'; }
 
-/* ── Init: default custom date range ── */
-(function(){
-  const t=today(), d=new Date();
+/* ── Init ── */
+(function init(){
+  const t=todayStr(), d=new Date();
   document.getElementById('d-to').value=t;
   d.setMonth(d.getMonth()-1);
   document.getElementById('d-from').value=d.toISOString().slice(0,10);
+  setTimeout(checkConnection, 600);
 })();
 </script>
 </body>
